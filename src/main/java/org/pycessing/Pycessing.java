@@ -1,8 +1,10 @@
 package main.java.org.pycessing;
 
+import java.io.PrintWriter;
 import java.util.ArrayList;
 
 import org.apache.commons.cli.*;
+import org.apache.commons.cli.Option.Builder;
 
 import processing.core.PApplet;
 
@@ -14,16 +16,16 @@ public class Pycessing {
   public static Boolean VERBOSE=false;
 
   public static void main(String[] args) {
+    
     Options options = getOptions();
     try {
       getArgs(options,args);
     } catch (ParseException e) {
       // TODO Auto-generated catch block
       e.printStackTrace();
-      showHelp();
+      showHelp("", false);
       return;
     }
-    
 
   }
   
@@ -87,7 +89,7 @@ public class Pycessing {
         .longOpt("stop-color")
         .desc("Set the color of the stop button")
         .build();
-    final Option hideStopOption = Option.builder("h")
+    final Option hideStopOption = Option.builder("hs")
         .required(false)
         .hasArg(false)
         .longOpt("hide-stop")
@@ -98,6 +100,12 @@ public class Pycessing {
         .hasArg(true)
         .longOpt("sketch-path")
         .desc("Set the sketch folder. This folder will be used as the default location for commands like \"saveFrame()\"")
+        .build();
+    final Option helpOption = Option.builder("h")
+        .required(false)
+        .hasArg(false)
+        .longOpt("help")
+        .desc("Print this help message")
         .build();
         
     
@@ -110,14 +118,18 @@ public class Pycessing {
     options.addOption(stopColorOption);
     options.addOption(hideStopOption);
     options.addOption(sketchPathOption);
+    options.addOption(helpOption);
     
     return options;
     
   }
   
-  public static void showHelp() {
+  public static void showHelp(String msg, Boolean stdout) {
     HelpFormatter formatter = new HelpFormatter();
-    formatter.printHelp("pycessing", getOptions());
+    PrintWriter pw = stdout ? new PrintWriter(System.out) : new PrintWriter(System.err);
+    formatter.printHelp(pw, 80, "pycessing [OPTIONS] [FILE]", "Options:", getOptions(), 4, 4, msg);
+    pw.flush();
+    pw.close();
   }
   
   public static void getArgs(Options options, String[] args) throws ParseException {
@@ -127,9 +139,17 @@ public class Pycessing {
     final String[] remaining = cmd.getArgs();
     String file;
     
+    if (cmd.hasOption("h") || cmd.hasOption("help")) {
+      showHelp("", true);
+      return;
+    }
+    
     if (remaining.length > 1) {
-      throw new ParseException("Invalid command");
-    } else if (remaining.length == 0) {
+      showHelp("Too many options", false);
+      return;
+    }
+    
+    if (remaining.length == 0) {
       INTERACTIVE=true;
     } else {
       file = remaining[0];
@@ -156,7 +176,7 @@ public class Pycessing {
       String a = PApplet.ARGS_STOP_COLOR + "=" + cmd.getOptionValue("c");
       PAPPLETARGS.add(a);
     }
-    if (cmd.hasOption("h")) {
+    if (cmd.hasOption("hs")) {
       PAPPLETARGS.add(PApplet.ARGS_HIDE_STOP);
     }
     if (cmd.hasOption("s")) {
