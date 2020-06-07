@@ -1,4 +1,4 @@
-package pycessing;
+package main.java.org.pycessing;
 
 import processing.core.PApplet;
 

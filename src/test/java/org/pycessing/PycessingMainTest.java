@@ -1,4 +1,4 @@
-package pycessing.tests;
+package test.java.org.pycessing;
 
 import static org.junit.jupiter.api.Assertions.*;
 
