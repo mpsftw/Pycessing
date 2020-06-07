@@ -1,0 +1,112 @@
+<?xml version="1.0"?>
+<project name="Pycessing" default="build">
+	
+	<property name="processing" value="../processing" />
+	
+	<property name="pycessing.pydir" value="pycessing" />
+	<property name="pycessing.javadir" value="${pycessing.pydir}/java" />
+	<property name="pycessing.javadocdir" value="${pycessing.javadir}/docs"/>
+	
+	<property name="src.dir" value="src"/>
+	<property name="src.pycessing" value="${src.dir}/pycessing"/>
+
+	<property name="test.dir" value="test/java"/>
+	<property name="test.src" value="${test.dir}/pycessing"/>
+	<property name="test.lib" value="${test.dir}/lib"/>
+	<property name="test.reports" value="${test.dir}/reports" />
+	
+	<property name="build.dir" value="build" />
+	<property name="build.lib" value="${build.dir}/lib" />
+
+	<property name="corejar" value="${processing}/core/library/core.jar" />
+	<property name="jepjar" value="build/jep/lib/python3.7/site-packages/jep/jep-3.9.0.jar" />
+	<property name="clijar" value="build/commons-cli-1.4/commons-cli-1.4.jar"/>
+	<property name="pycessingjar" value="${pycessing.javadir}/pycessing.jar"/>
+
+
+	<property name="core" value="${pycessing.javadir}/lib/core.jar" />
+	<property name="jep" value="${pycessing.javadir}/lib/jep-3.9.0.jar"/>
+	<property name="cli" value="${pycessing.javadir}/lib/commons-cli-1.4.jar"/>
+	
+	<path id="classpath">
+		<fileset dir=".">
+			<include name="${core}" />
+			<include name="${jep}" />
+			<include name="${cli}" />
+		</fileset>
+	</path>
+
+	<target name="makedir">
+		<mkdir dir="${build.dir}" />
+		<mkdir dir="${build.lib}" />
+		<mkdir dir="${pycessing.javadocdir}" />
+		<mkdir dir="${test.lib}"/>
+		<mkdir dir="${test.reports}"/>
+	</target>
+	
+	<target name="copyfiles" depends="makedir" >
+		<copy file="${corejar}" tofile="${core}"/>
+		<copy file="${jepjar}" tofile="${jep}"/>
+		<copy file="${clijar}" tofile="${cli}"/>
+	</target>
+	
+	<target name="compile" depends="copyfiles" >
+		<javac srcdir="${src.pycessing}" destdir="${build.lib}" classpathref="classpath" includeantruntime="false">
+		</javac>
+	</target>
+	
+	<target name="docs">
+		<javadoc packagenames="src" sourcepath="${src.pycessing}" destdir="${pycessing.javadocdir}" classpathref="classpath">
+			<fileset dir="${src.pycessing}" >
+				<include name="**" />
+			</fileset>
+		</javadoc>
+	</target>
+	
+	<target name="jar" depends="compile">
+		<jar destfile="${pycessingjar}">
+			<manifest>
+				<attribute name="Main-Class" value="Pycessing.main" />
+			</manifest>
+		</jar>
+	</target>
+	
+	<target name="build" depends="compile, jar, junit, docs">
+		<description>Default target</description>
+	</target>
+	
+	<!-- Unit Testing -->
+	
+	<path id="tests.classpath">
+		<fileset dir=".">
+			<include name="${core}" />
+			<include name="${jep}" />
+			<include name="${cli}" />
+			<include name="${pycessingjar}" />
+		</fileset>
+		<fileset dir="${ant.home}/lib" includes="*.jar" />
+		<fileset dir="${test.lib}" includes="*.jar" />
+	</path>
+	
+	<pathconvert property="classpathInName" refid="tests.classpath" />
+	<echo>Classpath is ${classpathInName}</echo>
+	
+	<target name="compile.tests">
+		<javac srcdir="${test.src}" destdir="${test.lib}" classpathref="tests.classpath" includeantruntime="true" />
+	</target>
+	
+	<target name="junit" depends="compile.tests">
+		<echo>"${test.src}"</echo>
+		<junitlauncher printsummary="on" haltonfailure="yes" >
+			<classpath refid="tests.classpath" />
+			<testclasses outputdir="${test.reports}" >
+				<fileset dir="${test.src}" >
+					<include name="**/*Test*.java" />
+				</fileset>
+				<listener type="legacy-xml" sendSysOut="true" sendSysErr="true"/>
+				<listener type="legacy-plain" sendSysOut="true" />
+			</testclasses>
+		</junitlauncher>
+	</target>
+
+</project>
