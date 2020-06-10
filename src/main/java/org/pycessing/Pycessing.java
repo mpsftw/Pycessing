@@ -1,5 +1,6 @@
 package main.java.org.pycessing;
 
+import java.io.File;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 
@@ -27,6 +28,11 @@ public class Pycessing {
       return;
     }
 
+  }
+  
+  private static Boolean checkForColor(String color) {
+    String pattern = "^#[a-fA-F0-9]{6}$";
+    return color.matches(pattern);
   }
   
   public static Options getOptions() {
@@ -57,7 +63,7 @@ public class Pycessing {
         .required(false)
         .hasArg(false)
         .longOpt("verbose")
-        .desc("Print extra debug information")
+        .desc("Print debugging information")
         .build();
     final Option interactiveOption = Option.builder("i")
         .required(false)
@@ -68,14 +74,15 @@ public class Pycessing {
     final Option displayOption = Option.builder("d")
         .required(false)
         .hasArg(true)
+        .type(Integer.class)
         .longOpt("display")
-        .desc("Suggest a display")
+        .desc("Suggest a display to use")
         .build();
     final Option windowColorOption = Option.builder("w")
         .required(false)
         .hasArg(true)
         .longOpt("window-color")
-        .desc("Set the color of the display window")
+        .desc("Set the color of the display window. <arg> should be in the form of a hexadecimal like #FFFFFF")
         .build();
     final Option presentOption = Option.builder("p")
         .required(false)
@@ -87,13 +94,13 @@ public class Pycessing {
         .required(false)
         .hasArg(true)
         .longOpt("stop-color")
-        .desc("Set the color of the stop button")
+        .desc("Set the color of the stop button. <arg> should be in the form of a hexadecimal like #FFFFFF")
         .build();
     final Option hideStopOption = Option.builder("hs")
         .required(false)
         .hasArg(false)
         .longOpt("hide-stop")
-        .desc("Hide the stop button")
+        .desc("-hs or --hide-stop: Hide the stop button")
         .build();
     final Option sketchPathOption = Option.builder("s")
         .required(false)
@@ -134,7 +141,15 @@ public class Pycessing {
   
   public static void getArgs(Options options, String[] args) throws ParseException {
     CommandLineParser parser = new DefaultParser();
-    CommandLine cmd = parser.parse( options, args);
+    CommandLine cmd;
+    
+    try {
+      cmd = parser.parse( options, args);
+    } catch (MissingArgumentException e1) {
+      Option o = e1.getOption();
+      showHelp("-" + o.getOpt() + " requires " + o.getArgs() + " argument(s)", false);
+      return;
+    }
     
     final String[] remaining = cmd.getArgs();
     String file;
@@ -158,30 +173,74 @@ public class Pycessing {
     if (cmd.hasOption("v")) {
       VERBOSE=true;
     }
+    
     if (cmd.hasOption("i")) {
       INTERACTIVE=true;
     }
+    
     if (cmd.hasOption("d")) {
-      String a=PApplet.ARGS_DISPLAY + "=" + cmd.getOptionValue("d");
+      String d = cmd.getOptionValue("d");
+      try {
+        Integer.parseInt(d);
+      } catch (NumberFormatException e) {
+        showHelp("Display argument must be a number. Recieved: " + d, false);
+        return;
+      }
+      String a=PApplet.ARGS_DISPLAY + "=" + d;
       PAPPLETARGS.add(a);
     }
+    
     if (cmd.hasOption("w")) {
-      String a=PApplet.ARGS_WINDOW_COLOR + "=" + cmd.getOptionValue("w");
+      String color = cmd.getOptionValue("w");
+      if (!checkForColor(color)) {
+        showHelp(color + " was not in the form of a hexadecimal like #FFFFFF", false);
+        return;
+      }
+      String a=PApplet.ARGS_WINDOW_COLOR + "=" + color;
       PAPPLETARGS.add(a);
     }
+    
+    if (cmd.hasOption("p")) {
+      String a=PApplet.ARGS_PRESENT;
+      PAPPLETARGS.add(a);
+    }
+    
     if (cmd.hasOption("p")) {
       PAPPLETARGS.add(PApplet.ARGS_PRESENT);
     }
+    
     if (cmd.hasOption("c")) {
-      String a = PApplet.ARGS_STOP_COLOR + "=" + cmd.getOptionValue("c");
+      String color = cmd.getOptionValue("c");
+      if (!checkForColor(color)) {
+        showHelp(color + " was not in the form of a hexadecimal like #FFFFFF", false);
+        return;
+      }
+      String a = PApplet.ARGS_STOP_COLOR + "=" + color;
       PAPPLETARGS.add(a);
     }
+    
     if (cmd.hasOption("hs")) {
       PAPPLETARGS.add(PApplet.ARGS_HIDE_STOP);
     }
+    
     if (cmd.hasOption("s")) {
-      String a = PApplet.ARGS_SKETCH_FOLDER + "=" + cmd.getOptionValue("s");
-      PAPPLETARGS.add("a");
+      String path = cmd.getOptionValue("s");
+      File directory = new File(path);
+      try {
+        if (!directory.exists()) {
+          directory.mkdirs();
+        } else {
+          if (!directory.isDirectory()) {
+            showHelp("A file already exists at " + path, false);
+            return;
+          }
+        }
+      } catch (SecurityException e) {
+        showHelp("Security error reading or writing to path " + path + "\n" + e.getLocalizedMessage(), false);
+        throw e;
+      }
+      String a = PApplet.ARGS_SKETCH_FOLDER + "=" + path;
+      PAPPLETARGS.add(a);
     }
     
     
