@@ -5,16 +5,18 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 
 import org.apache.commons.cli.*;
-import org.apache.commons.cli.Option.Builder;
 
+import jep.JepException;
+import jep.SharedInterpreter;
 import processing.core.PApplet;
 
 public class Pycessing {
   
-  public static final PAppletConnector PYAPPLET = new PAppletConnector();
-  public static final ArrayList<String> PAPPLETARGS = new ArrayList<String>();
+  public static final PAppletConnector PyApplet = new PAppletConnector();
+  public static final ArrayList<String> PAppletArgs = new ArrayList<String>();
   public static Boolean INTERACTIVE=false;
   public static Boolean VERBOSE=false;
+  public static final InterpreterPool pool = new InterpreterPool();
 
   public static void main(String[] args) {
     
@@ -26,6 +28,15 @@ public class Pycessing {
       e.printStackTrace();
       showHelp("", false);
       return;
+    }
+    
+    if (INTERACTIVE) {
+      try {
+        startREPLFromPool(pool);
+      } catch (JepException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      }
     }
 
   }
@@ -187,7 +198,7 @@ public class Pycessing {
         return;
       }
       String a=PApplet.ARGS_DISPLAY + "=" + d;
-      PAPPLETARGS.add(a);
+      PAppletArgs.add(a);
     }
     
     if (cmd.hasOption("w")) {
@@ -197,16 +208,16 @@ public class Pycessing {
         return;
       }
       String a=PApplet.ARGS_WINDOW_COLOR + "=" + color;
-      PAPPLETARGS.add(a);
+      PAppletArgs.add(a);
     }
     
     if (cmd.hasOption("p")) {
       String a=PApplet.ARGS_PRESENT;
-      PAPPLETARGS.add(a);
+      PAppletArgs.add(a);
     }
     
     if (cmd.hasOption("p")) {
-      PAPPLETARGS.add(PApplet.ARGS_PRESENT);
+      PAppletArgs.add(PApplet.ARGS_PRESENT);
     }
     
     if (cmd.hasOption("c")) {
@@ -216,11 +227,11 @@ public class Pycessing {
         return;
       }
       String a = PApplet.ARGS_STOP_COLOR + "=" + color;
-      PAPPLETARGS.add(a);
+      PAppletArgs.add(a);
     }
     
     if (cmd.hasOption("hs")) {
-      PAPPLETARGS.add(PApplet.ARGS_HIDE_STOP);
+      PAppletArgs.add(PApplet.ARGS_HIDE_STOP);
     }
     
     if (cmd.hasOption("s")) {
@@ -240,10 +251,20 @@ public class Pycessing {
         throw e;
       }
       String a = PApplet.ARGS_SKETCH_FOLDER + "=" + path;
-      PAPPLETARGS.add(a);
+      PAppletArgs.add(a);
     }
-    
-    
+  }
+  
+  public static void startREPLFromPool(InterpreterPool pool) throws JepException {
+    SharedInterpreter interp = pool.getOrCreateInterpreter();
+    try { 
+      interp.set("interpreter", interp);
+      interp.exec("from jep import console");
+      interp.exec("console.prompt(interpreter)");
+    } catch (JepException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    }
   }
 
 }

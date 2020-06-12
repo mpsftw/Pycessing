@@ -1,4 +1,4 @@
-package pycessing.tests;
+package test.java.org.pycessing;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -8,22 +8,22 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-class PAppletConnectorTest {
+public class PAppletConnectorTest {
 
   @BeforeAll
-  static void setUpBeforeClass() throws Exception {}
+  public static void setUpBeforeClass() throws Exception {}
 
   @AfterAll
-  static void tearDownAfterClass() throws Exception {}
+  public static void tearDownAfterClass() throws Exception {}
 
   @BeforeEach
-  void setUp() throws Exception {}
+  public void setUp() throws Exception {}
 
   @AfterEach
-  void tearDown() throws Exception {}
+  public void tearDown() throws Exception {}
 
   @Test
-  void test() {
+  public void test() {
     fail("Not yet implemented");
   }
 
