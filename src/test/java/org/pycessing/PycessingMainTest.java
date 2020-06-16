@@ -1,4 +1,4 @@
-package test.java.org.pycessing;
+package org.pycessing;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -11,6 +11,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
+import org.pycessing.Pycessing;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -32,9 +33,6 @@ import org.apache.commons.cli.ParseException;
 import jep.Interpreter;
 import jep.JepException;
 import jep.SharedInterpreter;
-import main.java.org.pycessing.InterpreterPool;
-import main.java.org.pycessing.InterpreterPool.InterpreterNotFoundException;
-import main.java.org.pycessing.Pycessing;
 import processing.core.PApplet;
 
 
@@ -52,7 +50,10 @@ public class PycessingMainTest {
   private static final FileAttribute<Set<PosixFilePermission>> writePermissions = PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr-xr-x"));
   private static final FileAttribute<Set<PosixFilePermission>> noWritePermission = PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("r-xr-xr-x"));
   
-  private static InterpreterPool mockedPool = mock(InterpreterPool.class);
+  @TempDir
+  public File testDir;
+  private File testFile;
+  private Path testFilePath;
   
   private final static String standardUsageString = "usage: pycessing [OPTIONS] [FILE]\n" + 
       "Options:\n" + 
@@ -74,11 +75,6 @@ public class PycessingMainTest {
     Pycessing.INTERACTIVE=false;
     Pycessing.VERBOSE=false;
     Pycessing.PAppletArgs.clear();
-  }
-
-  private static InterpreterPool mock(Class<InterpreterPool> class1) {
-    // TODO Auto-generated method stub
-    return null;
   }
 
   private static void failWithMessage(String msg) {
@@ -116,12 +112,19 @@ public class PycessingMainTest {
 
   @BeforeEach
   public void setUp() throws Exception {
+    testFilePath = Paths.get(testDir.getAbsolutePath()).resolve("testfile.txt");
+    testFile = testFilePath.toFile();
+    
     captureOutput();
   }
 
   @AfterEach
   public void tearDown() throws Exception {
     releaseOutput();
+    
+    
+    Files.deleteIfExists(testFilePath);
+    Mockito.validateMockitoUsage();
     reset();
   }
 
@@ -173,6 +176,34 @@ public class PycessingMainTest {
     assertEquals(standardUsageString + "This is a test\n", errContent.toString());
   }
   
+  @Test 
+  public void testGetFilenameMultipleOptions() {
+    String filename = testFile.getAbsolutePath();
+    String[] args = {"-i", "-p", filename};
+    
+    try {
+      Pycessing.getArgs(testOptions, args);
+    } catch (ParseException e) {
+      e.printStackTrace();
+      failWithMessage("testGetFilenameMultipleOptions caught an exception: " + errContent.toString());
+    }
+    assertEquals(filename, Pycessing.fileFromCLI);
+  }
+  
+  @Test 
+  public void testGetFilenameNoOptions() {
+    String filename = testFile.getAbsolutePath();
+    String[] args = {filename};
+    
+    try {
+      Pycessing.getArgs(testOptions, args);
+    } catch (ParseException e) {
+      e.printStackTrace();
+      failWithMessage("testGetFilenameNoOptions caught an exception: " + errContent.toString());
+    }
+    assertEquals(filename, Pycessing.fileFromCLI);
+  }
+  
   @Test
   public void testHelpShort() {
     String[] args = {"-h"};
@@ -213,7 +244,7 @@ public class PycessingMainTest {
     
   @Test
   public void testHelpWithOtherArgs() {
-    String[] args = {"-i", "-h", "/path/to/file"};
+    String[] args = {"-i", "-h", testFile.getAbsolutePath()};
     try {
       Pycessing.getArgs(testOptions, args);
     } catch (ParseException e) {
@@ -225,7 +256,7 @@ public class PycessingMainTest {
     
   @Test
   public void testHelpWithFile() {
-    String[] args = { "-h", "/path/to/file"};
+    String[] args = { "-h", testFile.getAbsolutePath()};
     try {
       Pycessing.getArgs(testOptions, args);
     } catch (ParseException e) {
@@ -250,7 +281,7 @@ public class PycessingMainTest {
   
   @Test
   public void testInteractiveShortArgs() {
-    String[] args = {"-i", "/path/to/test"};
+    String[] args = {"-i", testFile.getAbsolutePath()};
     try {
       Pycessing.getArgs(testOptions, args);
     } catch (ParseException e) {
@@ -272,8 +303,9 @@ public class PycessingMainTest {
     assertTrue(Pycessing.INTERACTIVE);
   }
   
+  @Test
   public void testVerboseOptionsShortArgs() {
-    String[] args = {"-v", "/path/to/test"};
+    String[] args = {"-v", testFile.getAbsolutePath()};
     
     try {
       Pycessing.getArgs(testOptions, args);
@@ -286,7 +318,7 @@ public class PycessingMainTest {
     
   @Test 
   public void testVerboseOptionsLongArgs() {
-    String[] args = {"--verbose", "/path/to/test"};
+    String[] args = {"--verbose", testFile.getAbsolutePath()};
     try {
       Pycessing.getArgs(testOptions, args);
     } catch (ParseException e) {
@@ -298,7 +330,7 @@ public class PycessingMainTest {
   
   @Test
   public void testDisplayOptionsShortArgs() {
-    String[] args = {"-d", "0", "/path/to/file"};
+    String[] args = {"-d", "0", testFile.getAbsolutePath()};
     
     try {
       Pycessing.getArgs(testOptions, args);
@@ -312,7 +344,7 @@ public class PycessingMainTest {
    
   @Test
   public void testDisplayOptionsLongArgs() {
-    String[] args = {"--display", "0", "/path/to/file"};
+    String[] args = {"--display", "0", testFile.getAbsolutePath()};
     try {
       Pycessing.getArgs(testOptions, args);
     } catch (ParseException e) {
@@ -324,7 +356,7 @@ public class PycessingMainTest {
     
   @Test
   public void testDisplayOptionsMissingArgsWithFile() {
-    String[] args = {"-d", "/path/to/file"};
+    String[] args = {"-d", testFile.getAbsolutePath()};
     try {
       Pycessing.getArgs(testOptions, args);
     } catch (ParseException e) {
@@ -332,7 +364,14 @@ public class PycessingMainTest {
       failWithMessage("testDisplayOptions argsMissingWithFile Caught Exception: " + errContent.toString());
     }
     assertEquals(0, Pycessing.PAppletArgs.size());
-    assertEquals(standardUsageString + "Display argument must be a number. Recieved: /path/to/file\n", errContent.toString());
+
+    Pattern regex = Pattern.compile("(.*)Display argument must be a number. Recieved:(.*)", Pattern.DOTALL);
+    String content = errContent.toString();
+    Matcher m = regex.matcher(content);
+    assertTrue(m.find(), "testDisplayOptionsMissingArgsWithFile test failed to produce correct error\n" +
+        "Expected:\n" + regex.toString() +
+        "\nRecieved:\n" + content + "\n");
+    //assertEquals(standardUsageString + "Display argument must be a number. Recieved: " + testFile.getAbsolutePath() + "\n", errContent.toString());
   }
     
   @Test
@@ -350,7 +389,7 @@ public class PycessingMainTest {
   
   @Test
   public void testWindowColorOptionsShort() {
-    String[] args = {"-w", "#FFFFFF", "/path/to/file"};
+    String[] args = {"-w", "#FFFFFF", testFile.getAbsolutePath()};
     
     try {
       Pycessing.getArgs(testOptions, args);
@@ -363,7 +402,7 @@ public class PycessingMainTest {
    
   @Test
   public void testWindowColorOptionsLong() {
-    String[] args = {"--window-color", "#FFFFFF", "/path/to/file"};
+    String[] args = {"--window-color", "#FFFFFF", testFile.getAbsolutePath()};
     try {
       Pycessing.getArgs(testOptions, args);
       assertEquals(Pycessing.PAppletArgs.get(0), PApplet.ARGS_WINDOW_COLOR + "=#FFFFFF");
@@ -375,7 +414,7 @@ public class PycessingMainTest {
    
   @Test
   public void testWindowColorOptionsArgNotAColor() {
-    String[] args = { "-w", "notacolor", "/path/to/file"};
+    String[] args = { "-w", "notacolor", testFile.getAbsolutePath()};
     try {
       Pycessing.getArgs(testOptions, args);
     } catch (Exception e) {
@@ -388,7 +427,7 @@ public class PycessingMainTest {
     
   @Test
   public void testWindowColorOptionsArgsMissingWithFile() {
-    String[] args = { "-w", "/path/to/file"};
+    String[] args = { "-w", testFile.getAbsolutePath()};
     try {
       Pycessing.getArgs(testOptions, args);
     } catch (Exception e) {
@@ -396,7 +435,14 @@ public class PycessingMainTest {
       assertEquals(0, Pycessing.PAppletArgs.size());
       failWithMessage("testDisplayOptions argsMissingWithFile Caught Exception: " + errContent.toString());
     }
-    assertEquals(standardUsageString + "/path/to/file was not in the form of a hexadecimal like #FFFFFF\n", errContent.toString());
+    
+    Pattern regex = Pattern.compile("(.*)was not in the form of a hexadecimal like #FFFFFF(.*)", Pattern.DOTALL);
+    String content = errContent.toString();
+    Matcher m = regex.matcher(content);
+    assertTrue(m.find(), "testWindowColorOptionsArgsMissingWithFile test failed to produce correct error\n" +
+        "Expected:\n" + regex.toString() +
+        "\nRecieved:\n" + content + "\n");
+    //assertEquals(standardUsageString + "/path/to/file was not in the form of a hexadecimal like #FFFFFF\n", errContent.toString());
   }
     
   @Test
@@ -414,7 +460,7 @@ public class PycessingMainTest {
   
   @Test
   public void testPresentOptionsShortArgs() {
-    String[] args = {"-p", "/path/to/test"};
+    String[] args = {"-p", testFile.getAbsolutePath()};
     
     try {
       Pycessing.getArgs(testOptions, args);
@@ -427,7 +473,7 @@ public class PycessingMainTest {
     
   @Test
   public void testPresentOptionsLongArgs() {
-    String[] args = {"--present", "/path/to/test"};
+    String[] args = {"--present", testFile.getAbsolutePath()};
     try {
       Pycessing.getArgs(testOptions, args);
     } catch (ParseException e) {
@@ -440,7 +486,7 @@ public class PycessingMainTest {
   
   @Test
   public void testStopColorOptionsShort() {
-    String[] args = {"-c", "#FFFFFF", "/path/to/file"};
+    String[] args = {"-c", "#FFFFFF", testFile.getAbsolutePath()};
     
     try {
       Pycessing.getArgs(testOptions, args);
@@ -453,7 +499,7 @@ public class PycessingMainTest {
     
   @Test
   public void testStopColorOptionsLong() {
-    String[] args = {"--stop-color", "#FFFFFF", "/path/to/file"};
+    String[] args = {"--stop-color", "#FFFFFF", testFile.getAbsolutePath()};
     try {
       Pycessing.getArgs(testOptions, args);
       assertEquals(Pycessing.PAppletArgs.get(0), PApplet.ARGS_STOP_COLOR + "=#FFFFFF");
@@ -465,7 +511,7 @@ public class PycessingMainTest {
     
   @Test
   public void testStopColorOptionsArgsNotAColor() {
-    String[] args = { "-c", "notacolor", "/path/to/file"};
+    String[] args = { "-c", "notacolor", testFile.getAbsolutePath()};
     try {
       Pycessing.getArgs(testOptions, args);
     } catch (Exception e) {
@@ -473,12 +519,13 @@ public class PycessingMainTest {
       assertEquals(0, Pycessing.PAppletArgs.size());
       failWithMessage("testStopColorOptions argsNotColor Caught Exception: " + errContent.toString());
     }
+    
     assertEquals(standardUsageString + "notacolor was not in the form of a hexadecimal like #FFFFFF\n", errContent.toString());
   }
     
   @Test
   public void testStopColorOptionsArgsMissingWithFile() {
-    String[] args = { "-c", "/path/to/file"};
+    String[] args = { "-c", testFile.getAbsolutePath()};
     try {
       Pycessing.getArgs(testOptions, args);
     } catch (Exception e) {
@@ -486,7 +533,14 @@ public class PycessingMainTest {
       assertEquals(0, Pycessing.PAppletArgs.size());
       failWithMessage("testStopColorOptions argsMissingWithFile Caught Exception: " + errContent.toString());
     }
-    assertEquals(standardUsageString + "/path/to/file was not in the form of a hexadecimal like #FFFFFF\n", errContent.toString());
+
+    Pattern regex = Pattern.compile("(.*)was not in the form of a hexadecimal like #FFFFFF(.*)", Pattern.DOTALL);
+    String content = errContent.toString();
+    Matcher m = regex.matcher(content);
+    assertTrue(m.find(), "testStopColorOptionsArgsMissingWithFile test failed to produce correct error\n" +
+        "Expected:\n" + regex.toString() +
+        "\nRecieved:\n" + content + "\n");
+    //assertEquals(standardUsageString + "/path/to/file was not in the form of a hexadecimal like #FFFFFF\n", errContent.toString());
   }
     
   @Test
@@ -529,7 +583,7 @@ public class PycessingMainTest {
   
   @Test
   public void testSketchPathOptionsShort(@TempDir Path sketchDir) {
-    String[] args = {"-s", sketchDir.toString(), "/path/to/file"};
+    String[] args = {"-s", sketchDir.toString(), testFile.getAbsolutePath()};
     // Using writableTmpDir for cleanup
     
     // Checking for args being set ignoring filesystem
@@ -544,7 +598,7 @@ public class PycessingMainTest {
      
   @Test
   public void testSketchPathOptionsLong(@TempDir Path sketchDir) {
-    String[] args = {"--sketch-path", sketchDir.toString(), "/path/to/file"};
+    String[] args = {"--sketch-path", sketchDir.toString(), testFile.getAbsolutePath()};
     try {
       Pycessing.getArgs(testOptions, args);
       assertEquals(Pycessing.PAppletArgs.get(0), PApplet.ARGS_SKETCH_FOLDER + "=" + sketchDir.toString());
@@ -584,7 +638,7 @@ public class PycessingMainTest {
   @Test
   public void testSketchPathOptionsDirectoryCreation(@TempDir Path sketchDir) {
     Path sketch = sketchDir.resolve("dir");
-    String[] args = {"-s", sketch.toString(), "/path/to/file"};
+    String[] args = {"-s", sketch.toString(), testFile.getAbsolutePath()};
     // Should create directory
     try {
       Pycessing.getArgs(testOptions, args);
@@ -618,7 +672,7 @@ public class PycessingMainTest {
     // Expect line breaks in the file name, so use pattern matching instead
     Pattern regex = Pattern.compile("(.*)A file already exists at(.*)", Pattern.DOTALL);
     
-    String[] args = {"-s", f.getAbsolutePath(), "/path/to/file"};
+    String[] args = {"-s", f.getAbsolutePath(), testFile.getAbsolutePath()};
     
     // Should create directory
     try {
@@ -632,21 +686,6 @@ public class PycessingMainTest {
     assertTrue(m.find(), "Display testSketchPathOptionsDirectoryIsAFile test failed to produce correct error\n" +
         "Expected:\n" + regex.toString() +
         "\nRecieved:\n" + content + "\n");
-  }
-  
-  @Test
-  public void testStartREPL() throws JepException, InterpreterNotFoundException {
-    InterpreterPool mockedPool = Mockito.mock(InterpreterPool.class);
-    SharedInterpreter mockedInterpreter = Mockito.mock(SharedInterpreter.class);
-    Mockito.when(mockedPool.getOrCreateInterpreter()).thenReturn(mockedInterpreter);
-    
-    Pycessing.startREPLFromPool(mockedPool);
-    
-    Mockito.verify(mockedPool).getOrCreateInterpreter();
-    Mockito.verify(mockedInterpreter).set("interpreter", mockedInterpreter);
-    Mockito.verify(mockedInterpreter).exec("from jep import console");
-    Mockito.verify(mockedInterpreter).exec("console.prompt(interpreter)");
-    
   }
 
 }

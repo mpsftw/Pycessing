@@ -1,6 +1,7 @@
-package main.java.org.pycessing;
+package org.pycessing;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 
@@ -14,9 +15,10 @@ public class Pycessing {
   
   public static final PAppletConnector PyApplet = new PAppletConnector();
   public static final ArrayList<String> PAppletArgs = new ArrayList<String>();
+  public static final ManagedInterpreter interp = new ManagedInterpreter(PyApplet);
   public static Boolean INTERACTIVE=false;
   public static Boolean VERBOSE=false;
-  public static final InterpreterPool pool = new InterpreterPool();
+  public static String fileFromCLI=null;
 
   public static void main(String[] args) {
     
@@ -30,13 +32,20 @@ public class Pycessing {
       return;
     }
     
-    if (INTERACTIVE) {
+    if (fileFromCLI != null) {
       try {
-        startREPLFromPool(pool);
-      } catch (JepException e) {
-        // TODO Auto-generated catch block
-        e.printStackTrace();
+        PyApplet.loadFile(fileFromCLI);
+      } catch (FileNotFoundException e) {
+        System.err.println(e.getLocalizedMessage());
       }
+    }
+    
+    PyApplet.startThread(PAppletArgs, interp);
+    
+    interp.startThread();
+    
+    if (INTERACTIVE) {
+      interp.startREPL();
     }
 
   }
@@ -163,7 +172,6 @@ public class Pycessing {
     }
     
     final String[] remaining = cmd.getArgs();
-    String file;
     
     if (cmd.hasOption("h") || cmd.hasOption("help")) {
       showHelp("", true);
@@ -178,7 +186,7 @@ public class Pycessing {
     if (remaining.length == 0) {
       INTERACTIVE=true;
     } else {
-      file = remaining[0];
+      fileFromCLI = remaining[0];
     }
     
     if (cmd.hasOption("v")) {
@@ -252,18 +260,6 @@ public class Pycessing {
       }
       String a = PApplet.ARGS_SKETCH_FOLDER + "=" + path;
       PAppletArgs.add(a);
-    }
-  }
-  
-  public static void startREPLFromPool(InterpreterPool pool) throws JepException {
-    SharedInterpreter interp = pool.getOrCreateInterpreter();
-    try { 
-      interp.set("interpreter", interp);
-      interp.exec("from jep import console");
-      interp.exec("console.prompt(interpreter)");
-    } catch (JepException e) {
-      // TODO Auto-generated catch block
-      e.printStackTrace();
     }
   }
 

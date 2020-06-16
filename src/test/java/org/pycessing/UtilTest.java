@@ -1,4 +1,4 @@
-package test.java.org.pycessing;
+package org.pycessing;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -10,9 +10,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import main.java.org.pycessing.Pycessing;
-import main.java.org.pycessing.Util;
+import org.pycessing.Pycessing;
+import org.pycessing.Util;
 
 class UtilTest {
   private  static ByteArrayOutputStream outContent;
