@@ -61,7 +61,8 @@ public class PAppletConnector extends PApplet implements Runnable{
     return sourceFile;
   }
 
-  public synchronized void startThread(ArrayList<String> args, ManagedInterpreter i) {
+  public synchronized void startThread(ArrayList<String> args) {
+    ManagedInterpreter i = new ManagedInterpreter();
     startThread(args, i, new Thread(this));
   }
   
@@ -70,6 +71,10 @@ public class PAppletConnector extends PApplet implements Runnable{
     this.interp = i;
     myThread = t;
     myThread.start();
+  }
+  
+  public void startREPL() {
+    this.interp.startREPL();
   }
   
   // Stop causes problems. Override it and have it do nothing
@@ -97,12 +102,22 @@ public class PAppletConnector extends PApplet implements Runnable{
     if (!running) {
      // super.exit();
     }
-    interp.send("draw()");
+    try {
+      interp.eval("draw()");
+    } catch (JepException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    }
   }
   
   @Override
   public void setup() {
-    interp.send("setup()");
+    try {
+      interp.eval("setup()");
+    } catch (JepException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    }
   }
   
   public void setSizeFromSetup(Path path) throws FileNotFoundException {
@@ -165,7 +180,12 @@ public class PAppletConnector extends PApplet implements Runnable{
   @Override 
   public synchronized void settings() {
     size(width,height,renderer);
-    interp.send("settings()");
+    try {
+      interp.eval("settings()");
+    } catch (JepException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    }
   }
 
   @Override
@@ -177,7 +197,7 @@ public class PAppletConnector extends PApplet implements Runnable{
   public void runSketch() {
     String[] argsArray = new String[args.size()+1];
     if (sourceFile != null) {
-      interp.exec(sourceFile);
+      interp.runScript(sourceFile.toString());
     }
     args.add(0, "org.pycessing.PAppletConnector");
     argsArray = args.toArray(argsArray);

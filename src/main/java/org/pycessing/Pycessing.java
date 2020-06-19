@@ -15,7 +15,6 @@ public class Pycessing {
   
   public static final PAppletConnector PyApplet = new PAppletConnector();
   public static final ArrayList<String> PAppletArgs = new ArrayList<String>();
-  public static final ManagedInterpreter interp = new ManagedInterpreter(PyApplet);
   public static Boolean INTERACTIVE=false;
   public static Boolean VERBOSE=false;
   public static String fileFromCLI=null;
@@ -40,12 +39,11 @@ public class Pycessing {
       }
     }
     
-    PyApplet.startThread(PAppletArgs, interp);
+    PyApplet.startThread(PAppletArgs);
     
-    interp.startThread();
     
     if (INTERACTIVE) {
-      interp.startREPL();
+      PyApplet.startREPL();
     }
 
   }
