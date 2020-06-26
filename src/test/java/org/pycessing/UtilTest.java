@@ -65,7 +65,12 @@ class UtilTest {
 
   @Test
   void testLogVerboseOn() {
-    Pycessing.VERBOSE=true;
+    try {
+      Pycessing.VERBOSE=true;
+    } catch (NullPointerException e) {
+      e.printStackTrace();
+      fail("Null pointer!");
+    }
     String outputString = "This is a test";
     Util.log(outputString);
     

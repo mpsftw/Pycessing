@@ -20,12 +20,15 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 import org.pycessing.PAppletConnector;
 
+import jep.JepException;
+import jep.python.PyCallable;
 import processing.core.PApplet;
 import processing.core.PConstants;
 import processing.core.PSurface;
@@ -98,7 +101,14 @@ public class PAppletConnectorTest {
     spiedArgs = newSpiedArgs(testFile.getAbsolutePath());
     mockedInterpreter = Mockito.mock(ManagedInterpreter.class);
     
-    testApplet = new PAppletConnector();
+    try {
+      testApplet = new PAppletConnector();
+      testApplet.setDebug(true);
+      testApplet.setInterpreter(mockedInterpreter);
+    } catch (NullPointerException e) {
+      e.printStackTrace();
+      fail();
+    }
     captureOutput();
   }
 
@@ -118,6 +128,7 @@ public class PAppletConnectorTest {
     
     Files.deleteIfExists(testFilePath);
     Mockito.validateMockitoUsage();
+    Pycessing.VERBOSE=false;
   }
 
   @Test
@@ -147,133 +158,6 @@ public class PAppletConnectorTest {
     FileNotFoundException thrown = assertThrows(FileNotFoundException.class, () -> testApplet.loadFile(pathToFile));
     
     assertTrue(thrown.getLocalizedMessage().matches(errorMsg), "\nExpected: " + errorMsg + "\nRecieved: " + thrown.getLocalizedMessage() + "\n");
-  }
-  
-  @Test
-  public void testStart() throws InterruptedException {
-    //Trust that Thread.class will run PAppletConnector.run()
-    Thread mockedThread = Mockito.mock(Thread.class);
-    
-    testApplet.startThread(spiedArgs, mockedInterpreter, mockedThread);
-    
-    Mockito.verify(mockedThread).start();
-  }
-  
-  @Test
-  public void testIsAlive() throws InterruptedException {
-    PAppletConnector spiedConnector = Mockito.spy(testApplet);
-    Thread spiedThread = Mockito.spy(new Thread(spiedConnector));
-    
-    Mockito.doAnswer(new Answer<String>() {
-      @Override
-      public String answer(InvocationOnMock invocation) {
-        try {
-          Thread.sleep(500);
-        } catch (InterruptedException e) {
-          failWithMessage("testIsAlive sleep caught an interruption: \n" + e.getLocalizedMessage());
-        }
-        return null;
-      }
-    }).when(spiedConnector).run();
-    
-    testApplet.startThread(spiedArgs, mockedInterpreter, spiedThread);
-    
-    assertTrue(spiedThread.isAlive(), "testIsAlive failed to start a thread to test");
-    assertTrue(testApplet.isAlive(), "testIsAlive should return true");
-    spiedThread.join();
-    
-  }
-  
-  @Test
-  public void testIsAliveDeadThread() {
-    assertFalse(testApplet.isAlive());
-  }
-  
-  @Test
-  public void testNormalStop() throws InterruptedException {
-    PAppletConnector spiedConnector = Mockito.spy(testApplet);
-    Thread spiedThread = Mockito.spy(new Thread(spiedConnector));
-    
-    // Run would normally set a PSurface, so we have to mock one
-    PSurface mockedSurface = Mockito.mock(PSurface.class);
-    spiedConnector.setSurface(mockedSurface);
-    
-    Mockito.doAnswer(new Answer<String>() {
-      @Override
-      public String answer(InvocationOnMock invocation) {
-        try {
-          Thread.sleep(5);
-        } catch (InterruptedException e) {
-          // This is expected
-        }
-        return null;
-      }
-    }).when(spiedConnector).run();
-    
-    spiedConnector.startThread(spiedArgs, mockedInterpreter, spiedThread);
-    
-    assertTrue(spiedThread.isAlive(), "testStop failed to start a thread for it to stop");
-    
-    // I'm getting a null pointer and I need a stack trace
-    try {
-      spiedConnector.halt();
-    } catch (NullPointerException e) {
-      e.printStackTrace();
-      failWithMessage("testNormalStop: testApplet.halt threw a NullPointerException!\n" + errContent.toString());
-    }
-    
-    assertFalse(spiedThread.isAlive(), "testStop failed to stop thread");
-    
-  }
-  
-  @Test
-  public void testTimeoutStop() throws InterruptedException {
-    // Halt should timeout and return control after 5000 millis
-    // Make sure that's happening
-    PAppletConnector spiedConnector = Mockito.spy(testApplet);
-    Thread spiedThread = Mockito.spy(new Thread(spiedConnector));
-    
-    // Run would normally set a PSurface, so we have to mock one
-    PSurface mockedSurface = Mockito.mock(PSurface.class);
-    spiedConnector.setSurface(mockedSurface);
-    
-    Answer<Void> timeoutAnswer = new Answer<Void>() {
-      @Override
-      public Void answer(InvocationOnMock invocation) {
-        try {
-          Thread.sleep(6000);
-        } catch (InterruptedException e) {
-          try {
-            // Make sure the thread doesn't actually die
-            Thread.sleep(6000);
-          } catch (InterruptedException e1) {
-            e1.printStackTrace();
-            failWithMessage("Second sleep is still getting interrupted");
-          }
-        }
-        return null;
-      }
-    };
-    
-    Mockito.doAnswer(timeoutAnswer).when(spiedConnector).run();
-    
-    spiedConnector.startThread(spiedArgs, mockedInterpreter, spiedThread);
-    
-    assertTrue(spiedThread.isAlive(), "testTimeoutStop failed to start a thread for it to stop");
-    spiedConnector.halt();
-    assertTrue(spiedThread.isAlive(), "testTimeoutStop failed to continue running past timeout");
-    
-    // Make sure the thread actually goes away
-    try {
-      spiedThread.join();
-    } catch (InterruptedException e) {
-      e.printStackTrace();
-      failWithMessage("testTimeoutStop: Unable to stop thread - Something is very wrong");
-    }
-    
-    assertFalse(spiedThread.isAlive(), "testTimeoutStop failed to stop thread");
-    Mockito.verify(spiedThread).interrupt();
-    
   }
   
   @Test
@@ -314,6 +198,60 @@ public class PAppletConnectorTest {
     } catch (Exception e) {
       e.printStackTrace();
       failWithMessage("Caught an unexpected error");
+    }
+  }
+  
+  @Test
+  @Timeout(10)
+  public void testRunSketch() {
+    //Pycessing.VERBOSE=true;
+    PyCallable drawFunc = Mockito.mock(PyCallable.class);
+    PyCallable setupFunc = Mockito.mock(PyCallable.class);
+    
+
+    Util.log("testRunSketch: new PAppletConnector");
+    testApplet=new PAppletConnector();
+    testApplet.setDebug(true);
+    
+    Util.log("testRunSketch: Building interpreter");
+    ManagedInterpreter spiedInterpreter = Mockito.spy(testApplet.getInterpreter());
+    spiedInterpreter.startInterpreter();
+
+    Util.log("testRunSketch: exec function definitions");
+    spiedInterpreter.exec("def setup():\n"
+        + "  PAppletMain.size(0)\n\n");
+    spiedInterpreter.exec("def draw():\n"
+        + "  PAppletMain.exit()\n\n");
+    
+    Util.log("Set interpreter");
+    testApplet.setInterpreter(spiedInterpreter);
+        
+
+    Util.log("testRunSketch: get test file");
+    String testScript = null;
+    try {
+      testScript = getPythonTestScript("SimplePlainPythonNoMain.py").toString();
+    } catch (FileNotFoundException e) {
+      e.printStackTrace();
+      failWithMessage("testRunSketch failed to open test script");
+    }
+
+    Util.log("testRunSketch: get args");
+    ArrayList<String> args = new ArrayList<String>();
+
+    testApplet.setInterpreter(spiedInterpreter);
+    testApplet.setArgs(args);
+
+    Util.log("testRunSketch: spy");
+    PAppletConnector spiedApplet = Mockito.spy(testApplet);
+
+    Util.log("testRunSketch: runSketch");
+    // Getting a null pointer
+    try {
+      spiedApplet.runSketch();
+    } catch (NullPointerException e) {
+      e.printStackTrace();
+      failWithMessage("runSketch threw a null pointer");
     }
     
     

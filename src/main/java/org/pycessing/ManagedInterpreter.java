@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CountDownLatch;
@@ -19,14 +20,13 @@ public class ManagedInterpreter implements Runnable {
   private SharedInterpreter interpreter;
   private Boolean debug=false;
 
-  private Thread thread;
+  private Thread thread = null;
   private Boolean running=false;
   private Boolean interactive=false;
-  private CommunicationContainer communication;
+  private CommunicationContainer communication = null;
   private boolean queuedToInterpret=false;
   private final Object interpretLock = new Object();
-  private final Object runningLock = new Object();
-  private boolean inRunLoop=false;
+  private final CountDownLatch startLatch = new CountDownLatch(1);
   private ByteArrayOutputStream outContent = new ByteArrayOutputStream();
   private ByteArrayOutputStream errContent = new ByteArrayOutputStream();
   private PrintStream capturedOut =  new PrintStream(outContent);
@@ -102,35 +102,46 @@ public class ManagedInterpreter implements Runnable {
   }
   
   public void startInterpreter() {
-    startInterpreter(new Thread(this));
+    Util.log("startInterpreter: starting with running=" + running);
+    if (running) {
+      Util.log("startInterpreter: looks like we're already running. Returning without doing anything.");
+      return;
+    }
+    try {
+      startInterpreter(new Thread(this));
+    } catch (NullPointerException e) {
+      e.printStackTrace();
+      return;
+    }
   }
 
   public void startInterpreter(Thread t) {
+    if (running) {
+      return;
+    }
     running=true;
     thread = t;
     
     // Wait until everything is set up.
     Util.log("startInterpreter: locking runningLock");
-    synchronized(runningLock) {
-      inRunLoop=false;
-      thread.start();
-      Util.log("startInterpreter: starting while loop: inRunLoop: " + inRunLoop);
-      while (!inRunLoop) {
-        try {
-          Util.log("startInterpreter: waiting runningLock, inRunLoop: " + inRunLoop);
-          runningLock.wait();
-          Util.log("startInterpreter: out of wait, inRunLoop: " + inRunLoop);
-        } catch (InterruptedException e) {
-          running=false;
-          return;
-        }
-      }
-      Util.log("startInterpreter: Finished");
+    thread.start();
+    Util.log("startInterpreter: starting while loop");
+    Util.log("startInterpreter: waiting startLatch");
+    try {
+      startLatch.await();
+    } catch (InterruptedException e) {
+      running=false;
+      return;
     }
+    Util.log("startInterpreter: out of wait");
+    Util.log("startInterpreter: Finished. Thread is alive: " + thread.isAlive());
   }
   
   public synchronized void close() throws JepException, InterruptedException {
     running = false;
+    if (thread == null) {
+      return;
+    }
     if (thread.isAlive()) {
       thread.interrupt();
     }
@@ -142,13 +153,10 @@ public class ManagedInterpreter implements Runnable {
     
     //Setup - this takes some time, but it MUST happen in the interpreter thread
     try {
-      if (interpreter == null) {
-        interpreter = new SharedInterpreter();
-      }
-    } catch (JepException e) {
+      interpreter = new SharedInterpreter();
+    } catch (JepException e3) {
       // TODO Auto-generated catch block
-      e.printStackTrace();
-      return;
+      e3.printStackTrace();
     }
     try {
       initializeInterpreter(interpreter);
@@ -159,38 +167,35 @@ public class ManagedInterpreter implements Runnable {
     }
     Util.log("Interpreter initialized");
 
-    Util.log("run: locking runningLock inRunLoop: " + inRunLoop);
-    synchronized(runningLock) {
-      inRunLoop=true;
-      Util.log("run: notifying runningLock inRunLoop: " + inRunLoop);
-      runningLock.notifyAll();
-      Util.log("run: runningLock notification sent inRunLoop: " + inRunLoop);
-    }
+    Util.log("run: counting down latch inRunLoop");
+    startLatch.countDown();
     
     try {
       runLoop();
     } catch (InterruptedException e1) {
+      Util.log("run: Caught interruption! Returning.");
       running=false;
-      return;
     }
-    inRunLoop=false;
 
     // Try to be nice
     try {
       // sending exit() crashes the interpreter. That could be a problem.
       // interpreter.eval("exit()");
+      Util.log("run: closing interpreter");
       interpreter.close();
       interpreter = null;
     } catch (JepException e) {
       // TODO Auto-generated catch block
       e.printStackTrace();
     }
+    Util.log("run: Returning.");
   }
 
   private void runLoop() throws InterruptedException {
     // Let everyone know we're here and looping
     Util.log("runLoop: entering while loop queuedToInterpret: " + queuedToInterpret);
     while (running) {
+      Util.log("runLoop:Top of loop quedToInterpret: " + queuedToInterpret);
       CommunicationContainer c = null;
 
       Util.log("runLoop: locking interpretLock queuedToInterpret: " + queuedToInterpret);
@@ -205,6 +210,7 @@ public class ManagedInterpreter implements Runnable {
         Util.log("runLoop: End of loop queuedToInterpret: " + queuedToInterpret);
         interpretLock.notifyAll();
       }
+      Util.log("runLoop:Bottom of loop quedToInterpret: " + queuedToInterpret);
     }
   }
 
@@ -257,6 +263,7 @@ public class ManagedInterpreter implements Runnable {
   
   @SuppressWarnings("unchecked")
   protected synchronized <T> CommunicationContainer<T> send(CommunicationContainer<T> c) throws InterruptedException {
+    Util.log("In send with command: " + c.getCmd());
     Util.log("send: locking interpretLock queuedToInterpret: " + queuedToInterpret);
     synchronized(interpretLock) {
       Util.log("send: setting communication queuedToInterpret: " + queuedToInterpret);
@@ -274,7 +281,7 @@ public class ManagedInterpreter implements Runnable {
       }
       c=communication;
     }
-    Util.log("send: leaving queuedToInterpret: " + queuedToInterpret);
+    Util.log("send: leaving command " + c.getCmd() + " with return value: " + c.getValue() + " queuedToInterpret: " + queuedToInterpret);
     
     return c;
   }
@@ -299,6 +306,8 @@ public class ManagedInterpreter implements Runnable {
   }
   
   public synchronized void exec(String statements) {
+    Util.log("exec(statements) with: " + statements);
+    Util.log("Running: " + thread.isAlive());
     CommunicationContainer<Boolean> comm = new CommunicationContainer<Boolean>(CMDS.EXEC);
     comm.setStatement(statements);
     
@@ -342,6 +351,7 @@ public class ManagedInterpreter implements Runnable {
   }
   
   public synchronized Object invoke(String symbol, Map<String, Object> kwargs) {
+    Util.log("invoke(symbol, kwargs) with: " + symbol + " " + kwargs);
     CommunicationContainer<Object> comm = new CommunicationContainer<Object>(CMDS.INVOKEKWARGS);
     comm.setStatement(symbol);
     comm.setKwargs(kwargs);
@@ -356,6 +366,7 @@ public class ManagedInterpreter implements Runnable {
   }
   
   public synchronized Object invoke(String symbol, Object... args) {
+    Util.log("invoke(symbol, args) with: " + symbol + " " + args);
     CommunicationContainer<Object> comm = new CommunicationContainer<Object>(CMDS.INVOKEARGS);
     comm.setStatement(symbol);
     comm.setArgs(args);
@@ -370,17 +381,21 @@ public class ManagedInterpreter implements Runnable {
   }
   
   public synchronized Object invoke(String symbol, Object[] args, Map<String, Object> kwargs) {
+    Util.log("invoke(symbol, args, kwargs) with: " + symbol + " " + args + " " + kwargs);
     CommunicationContainer<Object> comm = new CommunicationContainer<Object>(CMDS.INVOKEARGSKWARGS);
     comm.setStatement(symbol);
     comm.setArgs(args);
     comm.setKwargs(kwargs);
-    
+
+    Util.log("invoke sending");
     try {
       comm=send(comm);
     } catch (InterruptedException e) {
+      Util.log("invoke interrupted! returning.");
       running=false;
       return comm.getValue();
     }
+    Util.log("invoke returning");
     return comm.getValue();
   }
   
@@ -392,9 +407,9 @@ public class ManagedInterpreter implements Runnable {
       comm=send(comm);
     } catch (InterruptedException e) {
       running=false;
-      return;
+      return; //(String) comm.getValue();
     }
-    return;
+    return; //(String) comm.getValue();
   }
   
   public synchronized void set(String symbol, Object obj) {
@@ -488,6 +503,14 @@ public class ManagedInterpreter implements Runnable {
     INVOKEARGSKWARGS,
     RUNSCRIPT,
     SET
+  }
+
+  public void setPAppletMain(PAppletConnector pAppletConnector) {
+    set("PAppletMain", pAppletConnector);
+    exec("for name in dir(PAppletMain):\n"
+        + "  if name.startswith('__') and name.endswith('__'):\n"
+        + "    continue\n"
+        + "  exec(name + ' = PAppletMain.' + name)\n\n\n");
   }
 
 }

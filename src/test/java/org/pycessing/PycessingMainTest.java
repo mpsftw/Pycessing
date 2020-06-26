@@ -7,6 +7,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
@@ -129,6 +130,7 @@ public class PycessingMainTest {
   }
 
   @Test
+  @Timeout(5)
   public void testDefaults() {
     assertFalse(Pycessing.INTERACTIVE);
     assertFalse(Pycessing.VERBOSE);
@@ -137,6 +139,7 @@ public class PycessingMainTest {
   }
   
   @Test
+  @Timeout(5)
   public void testGetOptions() {
     Options options = Pycessing.getOptions();
     assertNotNull(options);
@@ -159,24 +162,28 @@ public class PycessingMainTest {
   }
   
   @Test
+  @Timeout(5)
   public void testShowHelpNoMessageStdout() {
     Pycessing.showHelp("", true);
     assertEquals(standardUsageString, outContent.toString());
   }
     
   @Test
+  @Timeout(5)
   public void testShowHelpWithMessageStdout() {
     Pycessing.showHelp("This is a test", true);
     assertEquals(standardUsageString + "This is a test\n", outContent.toString());
   }
   
   @Test
+  @Timeout(5)
   public void testShowHelpWithMessageStderr() {
     Pycessing.showHelp("This is a test", false);
     assertEquals(standardUsageString + "This is a test\n", errContent.toString());
   }
   
   @Test 
+  @Timeout(5)
   public void testGetFilenameMultipleOptions() {
     String filename = testFile.getAbsolutePath();
     String[] args = {"-i", "-p", filename};
@@ -191,6 +198,7 @@ public class PycessingMainTest {
   }
   
   @Test 
+  @Timeout(5)
   public void testGetFilenameNoOptions() {
     String filename = testFile.getAbsolutePath();
     String[] args = {filename};
@@ -205,6 +213,7 @@ public class PycessingMainTest {
   }
   
   @Test
+  @Timeout(5)
   public void testHelpShort() {
     String[] args = {"-h"};
     
@@ -218,6 +227,7 @@ public class PycessingMainTest {
   }
   
   @Test
+  @Timeout(5)
   public void testHelpLong() {
     String[] args = {"--help"};
     try {
@@ -230,6 +240,7 @@ public class PycessingMainTest {
   }
   
   @Test
+  @Timeout(5)
   public void testHelpTooMany() {
 
     String[] args = {"-i", "-p", "blah", "1", "2", "3"};
@@ -243,6 +254,7 @@ public class PycessingMainTest {
   }
     
   @Test
+  @Timeout(5)
   public void testHelpWithOtherArgs() {
     String[] args = {"-i", "-h", testFile.getAbsolutePath()};
     try {
@@ -255,6 +267,7 @@ public class PycessingMainTest {
   }
     
   @Test
+  @Timeout(5)
   public void testHelpWithFile() {
     String[] args = { "-h", testFile.getAbsolutePath()};
     try {
@@ -267,6 +280,7 @@ public class PycessingMainTest {
   }
   
   @Test
+  @Timeout(5)
   public void testInteractiveOptionsEmptyArgs() {
     String[] args = {};
     
@@ -280,6 +294,7 @@ public class PycessingMainTest {
   }
   
   @Test
+  @Timeout(5)
   public void testInteractiveShortArgs() {
     String[] args = {"-i", testFile.getAbsolutePath()};
     try {
@@ -292,6 +307,7 @@ public class PycessingMainTest {
   }
 
   @Test
+  @Timeout(5)
   public void testInteractiveLongArgs() {
     String[] args = {"--interactive"};
     try {
@@ -304,6 +320,7 @@ public class PycessingMainTest {
   }
   
   @Test
+  @Timeout(5)
   public void testVerboseOptionsShortArgs() {
     String[] args = {"-v", testFile.getAbsolutePath()};
     
@@ -317,6 +334,7 @@ public class PycessingMainTest {
   }
     
   @Test 
+  @Timeout(5)
   public void testVerboseOptionsLongArgs() {
     String[] args = {"--verbose", testFile.getAbsolutePath()};
     try {
@@ -329,6 +347,7 @@ public class PycessingMainTest {
   }
   
   @Test
+  @Timeout(5)
   public void testDisplayOptionsShortArgs() {
     String[] args = {"-d", "0", testFile.getAbsolutePath()};
     
@@ -343,6 +362,7 @@ public class PycessingMainTest {
   }
    
   @Test
+  @Timeout(5)
   public void testDisplayOptionsLongArgs() {
     String[] args = {"--display", "0", testFile.getAbsolutePath()};
     try {
@@ -355,6 +375,7 @@ public class PycessingMainTest {
   }
     
   @Test
+  @Timeout(5)
   public void testDisplayOptionsMissingArgsWithFile() {
     String[] args = {"-d", testFile.getAbsolutePath()};
     try {
@@ -375,6 +396,7 @@ public class PycessingMainTest {
   }
     
   @Test
+  @Timeout(5)
   public void testDisplayOptionsMissingArgsWithoutFile() {
     String[] args = {"-i", "-d"};
     try {
@@ -388,6 +410,7 @@ public class PycessingMainTest {
   }
   
   @Test
+  @Timeout(5)
   public void testWindowColorOptionsShort() {
     String[] args = {"-w", "#FFFFFF", testFile.getAbsolutePath()};
     
@@ -401,6 +424,7 @@ public class PycessingMainTest {
   }
    
   @Test
+  @Timeout(5)
   public void testWindowColorOptionsLong() {
     String[] args = {"--window-color", "#FFFFFF", testFile.getAbsolutePath()};
     try {
@@ -413,6 +437,7 @@ public class PycessingMainTest {
   }
    
   @Test
+  @Timeout(5)
   public void testWindowColorOptionsArgNotAColor() {
     String[] args = { "-w", "notacolor", testFile.getAbsolutePath()};
     try {
@@ -426,6 +451,7 @@ public class PycessingMainTest {
   }
     
   @Test
+  @Timeout(5)
   public void testWindowColorOptionsArgsMissingWithFile() {
     String[] args = { "-w", testFile.getAbsolutePath()};
     try {
@@ -446,6 +472,7 @@ public class PycessingMainTest {
   }
     
   @Test
+  @Timeout(5)
   public void testWindowColorOptionsArgsMissingWithoutFile() {
     String[] args = { "-w" };
     try {
@@ -459,6 +486,7 @@ public class PycessingMainTest {
   }
   
   @Test
+  @Timeout(5)
   public void testPresentOptionsShortArgs() {
     String[] args = {"-p", testFile.getAbsolutePath()};
     
@@ -472,6 +500,7 @@ public class PycessingMainTest {
   }
     
   @Test
+  @Timeout(5)
   public void testPresentOptionsLongArgs() {
     String[] args = {"--present", testFile.getAbsolutePath()};
     try {
@@ -485,6 +514,7 @@ public class PycessingMainTest {
   }
   
   @Test
+  @Timeout(5)
   public void testStopColorOptionsShort() {
     String[] args = {"-c", "#FFFFFF", testFile.getAbsolutePath()};
     
@@ -498,6 +528,7 @@ public class PycessingMainTest {
   }
     
   @Test
+  @Timeout(5)
   public void testStopColorOptionsLong() {
     String[] args = {"--stop-color", "#FFFFFF", testFile.getAbsolutePath()};
     try {
@@ -510,6 +541,7 @@ public class PycessingMainTest {
   }
     
   @Test
+  @Timeout(5)
   public void testStopColorOptionsArgsNotAColor() {
     String[] args = { "-c", "notacolor", testFile.getAbsolutePath()};
     try {
@@ -524,6 +556,7 @@ public class PycessingMainTest {
   }
     
   @Test
+  @Timeout(5)
   public void testStopColorOptionsArgsMissingWithFile() {
     String[] args = { "-c", testFile.getAbsolutePath()};
     try {
@@ -544,6 +577,7 @@ public class PycessingMainTest {
   }
     
   @Test
+  @Timeout(5)
   public void testStopColorOptionsArgsMissingWithoutFile() {
     String[] args = { "-c" };
     try {
@@ -557,6 +591,7 @@ public class PycessingMainTest {
   }
   
   @Test
+  @Timeout(5)
   public void testHideStopOptionsShort() {
     String[] args = {"-hs", "/path/to/test"};
     
@@ -570,6 +605,7 @@ public class PycessingMainTest {
   }
     
   @Test
+  @Timeout(5)
   public void testHideStopOptionsLong() {
     String[] args = {"--hide-stop", "/path/to/test"};
     try {
@@ -582,6 +618,7 @@ public class PycessingMainTest {
   }
   
   @Test
+  @Timeout(5)
   public void testSketchPathOptionsShort(@TempDir Path sketchDir) {
     String[] args = {"-s", sketchDir.toString(), testFile.getAbsolutePath()};
     // Using writableTmpDir for cleanup
@@ -597,6 +634,7 @@ public class PycessingMainTest {
   }
      
   @Test
+  @Timeout(5)
   public void testSketchPathOptionsLong(@TempDir Path sketchDir) {
     String[] args = {"--sketch-path", sketchDir.toString(), testFile.getAbsolutePath()};
     try {
@@ -609,6 +647,7 @@ public class PycessingMainTest {
   }
       
   @Test
+  @Timeout(5)
   public void testSketchPathOptionsArgsMissingWithFile(@TempDir Path sketchDir) {
     String[] args = {"-s", sketchDir.toString()};
     // This should actually be accepted, assume the arg is the path to the sketch file, and set INTERACTIVE to true
@@ -623,6 +662,7 @@ public class PycessingMainTest {
   }
    
   @Test
+  @Timeout(5)
   public void testSketchPathOptionsArgsMissingWithoutFile() {
     String[] args = {"-s"};
     // Should fail with missing arg exception
@@ -636,6 +676,7 @@ public class PycessingMainTest {
   }
   
   @Test
+  @Timeout(5)
   public void testSketchPathOptionsDirectoryCreation(@TempDir Path sketchDir) {
     Path sketch = sketchDir.resolve("dir");
     String[] args = {"-s", sketch.toString(), testFile.getAbsolutePath()};
@@ -655,6 +696,7 @@ public class PycessingMainTest {
   }
   
   @Test
+  @Timeout(5)
   public void testSketchPathOptionsDirectoryIsAFile(@TempDir Path sketchDir) {
     Path sketchFile = sketchDir.resolve("file");
     File f = sketchFile.toFile();

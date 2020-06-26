@@ -12,7 +12,7 @@ import java.util.regex.Pattern;
 
 
 import jep.JepException;
-import jep.SharedInterpreter;
+import jep.python.PyCallable;
 import processing.core.PApplet;
 import processing.core.PConstants;
 import processing.core.PSurface;
@@ -22,17 +22,36 @@ public class PAppletConnector extends PApplet implements Runnable{
   private String renderer=PConstants.JAVA2D;
   private Path sourceFile=null;
   private ArrayList<String> args;
-  private Thread myThread;
   private Boolean running=false;
   private ManagedInterpreter interp;
+  private boolean debug;
   
   public PAppletConnector() {
     super();
-    args = new ArrayList<String>();
+    interp = new ManagedInterpreter();
+  }
+  
+  protected void setDebug(boolean b) {
+    debug=b;
+  }
+  
+  public ArrayList<String> getArgs() {
+    return args;
+  }
+  
+  public void setArgs(ArrayList<String> args) {
+    this.args = args;
   }
   
   public ManagedInterpreter getInterpreter() {
     return interp;
+  }
+  
+  public void setInterpreter(ManagedInterpreter interp) {
+    if (!debug) {
+      throw new RuntimeException("You can only set the interpreter in debug mode.");
+    }
+    this.interp = interp;
   }
   
   public void setSurface(PSurface s) {
@@ -60,64 +79,41 @@ public class PAppletConnector extends PApplet implements Runnable{
   public Path getSourceFile() {
     return sourceFile;
   }
-
-  public synchronized void startThread(ArrayList<String> args) {
-    ManagedInterpreter i = new ManagedInterpreter();
-    startThread(args, i, new Thread(this));
-  }
-  
-  public synchronized void startThread(ArrayList<String> args, ManagedInterpreter i, Thread t) {
-    this.args=args;
-    this.interp = i;
-    myThread = t;
-    myThread.start();
-  }
   
   public void startREPL() {
     this.interp.startREPL();
   }
   
-  // Stop causes problems. Override it and have it do nothing
+  @Override
+  public void size(int width, int height) {
+    Util.log("PAppletConnector size(" + width + "," + height + ")");
+    super.size(width, height);
+  }
+  
   @Override 
-  public void stop() {
-    return;
+  public void start() {
+    Util.log("PAppletConnector start");
+    super.start();
   }
   
-  public synchronized void halt() throws InterruptedException {
-    running=false;
-    dispose();
-    myThread.interrupt();
-    myThread.join(5000L);
-  }
-  
-  public synchronized Boolean isAlive() {
-    if (myThread == null) {
-      return false;
-    }
-    return myThread.isAlive();
+  @Override 
+  public void handleDraw() {
+    Util.log("PAppletConnector handleDraw");
+    super.handleDraw();
   }
   
   @Override
   public void draw() {
-    if (!running) {
-     // super.exit();
-    }
-    try {
-      interp.eval("draw()");
-    } catch (JepException e) {
-      // TODO Auto-generated catch block
-      e.printStackTrace();
-    }
+    Util.log("PAppletConnector draw");
+    this.interp.exec("if 'draw' in dir():\n"
+        + "  draw()\n\n");
   }
   
   @Override
   public void setup() {
-    try {
-      interp.eval("setup()");
-    } catch (JepException e) {
-      // TODO Auto-generated catch block
-      e.printStackTrace();
-    }
+    Util.log("PAppletConnector setup");
+    this.interp.exec("if 'setup' in dir():\n"
+        + "  setup()\n\n");
   }
   
   public void setSizeFromSetup(Path path) throws FileNotFoundException {
@@ -179,13 +175,11 @@ public class PAppletConnector extends PApplet implements Runnable{
 
   @Override 
   public synchronized void settings() {
-    size(width,height,renderer);
-    try {
-      interp.eval("settings()");
-    } catch (JepException e) {
-      // TODO Auto-generated catch block
-      e.printStackTrace();
-    }
+    Util.log("PAppletConnector settings interp=" + interp + "and is running: " + interp.isRunning());
+    Util.log("PAppletConnector settings running super.size(" + width + "," + height + "," + renderer);
+    super.size(width,height,renderer);
+    this.interp.exec("if 'settings' in dir()\n"
+        + "  settings()\n\n");
   }
 
   @Override
@@ -195,13 +189,33 @@ public class PAppletConnector extends PApplet implements Runnable{
   
   @Override
   public void runSketch() {
+    Util.log("PAppletConnector runScript: starting interpreter");
+    interp.startInterpreter();
+    interp.setPAppletMain(this);
+    
+    
     String[] argsArray = new String[args.size()+1];
     if (sourceFile != null) {
+      Util.log("PAppletConnector runScript: running interp.runScript");
       interp.runScript(sourceFile.toString());
     }
+
+    Util.log("PAppletConnector runScript: adding args");
     args.add(0, "org.pycessing.PAppletConnector");
     argsArray = args.toArray(argsArray);
-    runSketch(argsArray, null);
+    if (argsArray == null) {
+      argsArray = new String[] {};
+    }
+
+    if (Pycessing.VERBOSE) {
+      System.out.print("PAppletConnector runScript: running super.runsketch(" + this.getClass().toString() + ", [");
+      for (int i=0; i<argsArray.length; i++) {
+        System.out.print(argsArray[i] + ", ");
+      }
+      System.out.print("]" + ", null)\n");
+    }
+    super.runSketch(argsArray);
+    Util.log("PAppletConnector runScript: complete. Exiting");
   }
 
 }

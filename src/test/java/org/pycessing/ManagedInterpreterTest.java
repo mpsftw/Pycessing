@@ -25,6 +25,7 @@ import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 import org.pycessing.ManagedInterpreter.CMDS;
 import org.pycessing.ManagedInterpreter.CommunicationContainer;
+import static java.time.Duration.ofSeconds;
 
 import jep.JepException;
 import jep.SharedInterpreter;
@@ -64,11 +65,17 @@ class ManagedInterpreterTest {
   }
   
   private static void captureOutput() {
+    Util.log("captureOutput: outContent");
     outContent = new ByteArrayOutputStream();
+    Util.log("captureOutput: errContent");
     errContent = new ByteArrayOutputStream();
+    Util.log("captureOutput: capturedOut");
     capturedOut =  new PrintStream(outContent);
+    Util.log("captureOutput: capturedErr");
     capturedErr = new PrintStream(errContent);
+    Util.log("captureOutput: setOut");
     System.setOut(capturedOut);
+    Util.log("captureOutput: setErr");
     System.setErr(capturedErr);
   }
   
@@ -78,7 +85,9 @@ class ManagedInterpreterTest {
   }
   
   private void createTestInterpreter() throws JepException {
+    Util.log("createTestInterpreter: spiedInterp");
     spiedInterp = Mockito.spy(new ManagedInterpreter());
+    Util.log("createTestInterpreter: setDebug");
     spiedInterp.setDebug(true);
   }
 
@@ -96,19 +105,34 @@ class ManagedInterpreterTest {
   @BeforeEach
   @Timeout(5)
   void setUp() throws Exception {
+    //Pycessing.VERBOSE=true;
+    Util.log("setUp: testFilePath");
     testFilePath = Paths.get(testDir.getAbsolutePath()).resolve("testfile.txt");
+    Util.log("setUp: testFile");
     testFile = testFilePath.toFile();
+    Util.log("setUp: mockedThread");
     mockedThread = Mockito.mock(Thread.class);
-    
+
+    Util.log("setUp: createTestInterpreter");
     createTestInterpreter();
 
+    Util.log("setUp: captureOutput");
     captureOutput();
   }
 
   @AfterEach
-  @Timeout(5)
+  @Timeout(10)
   void tearDown() throws Exception {
-    //Pycessing.VERBOSE=false;
+    Util.log("tearDown: delete file");
+    
+    Files.deleteIfExists(testFilePath);
+    Util.log("tearDown: validateMockitoUsage");
+    Mockito.validateMockitoUsage();
+    Util.log("tearDown: spiedInterp.close");
+    assertTimeout(ofSeconds(2), () -> {spiedInterp.close();});
+    spiedInterp = null;
+    Util.log("tearDown: capture content");
+    Pycessing.VERBOSE=false;
     String output = outContent.toString();
     String error = errContent.toString();
     releaseOutput();
@@ -120,10 +144,6 @@ class ManagedInterpreterTest {
     if (!error.isEmpty()) {
       System.err.print("\nerr:\n-----\n" + error + "\n-----\n");
     }
-    
-    Files.deleteIfExists(testFilePath);
-    Mockito.validateMockitoUsage();
-    spiedInterp = null;
   }
   
   @Test 
@@ -417,11 +437,21 @@ class ManagedInterpreterTest {
   }
   
   @Test
-  @Timeout(5)
+  @Timeout(10)
   public void testInvokeArgsKwargs() throws JepException, InterruptedException {
-    spiedInterp.startInterpreter();
+    //Pycessing.VERBOSE=true;
+    Util.log("testInvokeArgsKwargs: Starting interpreter");
+    try {
+      spiedInterp.startInterpreter();
+    } catch (Exception e) {
+      e.printStackTrace();
+      fail();
+    }
+    Util.log("testInvokeArgsKwargs: Get interpreter");
     SharedInterpreter originalInterpreter = spiedInterp.getInterpreter();
+    Util.log("testInvokeArgsKwargs: Spy interpreter");
     SharedInterpreter spiedInterpreter = Mockito.spy(originalInterpreter);
+    Util.log("testInvokeArgsKwargs: Set interpreter");
     spiedInterp.setInterpreter(spiedInterpreter);
     
     String argsTestFunc = "def testArgsKwargs(*args, **kwargs):\n" + 
@@ -451,17 +481,24 @@ class ManagedInterpreterTest {
     // members of kwargs. Might need to change this test into a regex
     
     //Pycessing.VERBOSE=true;
+    Util.log("testInvokeArgsKwargs: exec func");
     spiedInterp.exec(argsTestFunc);
     //Pycessing.VERBOSE=true;
-    
+
+    Util.log("testInvokeArgsKwargs: invoke");
     Object returnValue = spiedInterp.invoke(func, args, kwargs);
+    
+
+    Util.log("testInvokeArgsKwargs: cast to string");
     String result = (String) returnValue;
-    
+
+    Util.log("testInvokeArgsKwargs: verify invoke ran");
     Mockito.verify(spiedInterpreter, Mockito.description("testInvokeKwargs failed to run invoke")).invoke(func, args, kwargs);
-    
+
+    Util.log("testInvokeArgsKwargs: assert result");
     assertEquals("( ( 1 2 3 ) ( test2 : 5 ) ( test1 : 4 ) )", result);
-    
-    spiedInterp.close();
+
+    Util.log("testInvokeArgsKwargs: leaving");
   }
   
   @Test
@@ -483,7 +520,7 @@ class ManagedInterpreterTest {
     assertEquals(3, result, testFunc + " should return n + 1");
   }
   
-  //@Test
+  @Test
   @Timeout(5)
   public void testRunScriptWithMain() throws FileNotFoundException, JepException {
     //Pycessing.VERBOSE=true;
@@ -496,12 +533,11 @@ class ManagedInterpreterTest {
     
     // The script runs simpleTestFunc(2) (same as testRunScriptNoMain) and prints to stdout:
     // "Function returned: 3"
+    // Nope. Can't capture stdout from runscript. Gotta find a different way.
     
-    String expectedOutput = "Function returned: 3";
     spiedInterp.runScript(testScript.toString());
     Mockito.verify(spiedInterpreter, Mockito.description("Failed to run script")).runScript(testScript.toString());
     
-    assertEquals(expectedOutput, spiedInterp.getOutput());
   }
   
   @Test
@@ -521,6 +557,54 @@ class ManagedInterpreterTest {
     
     testValue[2]=784;
     assertEquals(testValue, spiedInterp.getValue("tv"), "The new value didn't follow");
+  }
+  
+  @Test
+  @Timeout(5) 
+  public void testRunFromDifferentThread() throws JepException, InterruptedException {
+    // Start the interpreter from a different thread to make sure everything works
+    class OtherThread implements Runnable {
+      ManagedInterpreter i;
+
+      @Override
+      public void run() {
+        i = new ManagedInterpreter();
+        i.startInterpreter();
+      }
+      
+    }
+    
+    OtherThread ot = new OtherThread();
+    Thread otThread = new Thread(ot);
+    otThread.start();
+    
+    // Sleep for a bit to make sure the interpreter is started
+    Thread.sleep(500);
+    
+    try {
+      assertEquals(17L, ot.i.getValue("14+3"));
+    } catch (NullPointerException e) {
+      e.printStackTrace();
+      failWithMessage("testRunFromDifferentThread caught a null pointer");
+    }
+    
+    ot.i.close();
+  }
+  
+  @Test
+  @Timeout(5)
+  public void testSetPAppletMain() throws JepException, InterruptedException {
+    PAppletConnector mockedConnector = Mockito.mock(PAppletConnector.class);
+    spiedInterp.startInterpreter();
+    spiedInterp.setPAppletMain(mockedConnector);
+    
+    spiedInterp.exec("background(0)");
+    spiedInterp.exec("ellipse(20, 20, 20, 20)");
+    
+    spiedInterp.close();
+    
+    Mockito.verify(mockedConnector).background(0);
+    Mockito.verify(mockedConnector).ellipse(20, 20, 20, 20);
   }
 
 }
