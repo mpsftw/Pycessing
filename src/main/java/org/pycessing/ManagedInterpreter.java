@@ -2,8 +2,12 @@ package org.pycessing;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -13,6 +17,8 @@ import java.util.concurrent.TimeUnit;
 import jep.Jep;
 import jep.JepException;
 import jep.SharedInterpreter;
+import processing.core.PApplet;
+import processing.core.PConstants;
 
 public class ManagedInterpreter implements Runnable {
   
@@ -21,8 +27,9 @@ public class ManagedInterpreter implements Runnable {
   private Boolean debug=false;
 
   private Thread thread = null;
-  private Boolean running=false;
-  private Boolean interactive=false;
+  private boolean running=false;
+  private boolean interactive=false;
+  private boolean mainset=false;
   private CommunicationContainer communication = null;
   private boolean queuedToInterpret=false;
   private final Object interpretLock = new Object();
@@ -205,7 +212,7 @@ public class ManagedInterpreter implements Runnable {
           interpretLock.wait();
         }
         Util.log("runLoop: interpreting queuedToInterpret: " + queuedToInterpret);
-        c = interpret(communication);
+        interpret(communication);
         queuedToInterpret=false;
         Util.log("runLoop: End of loop queuedToInterpret: " + queuedToInterpret);
         interpretLock.notifyAll();
@@ -218,29 +225,51 @@ public class ManagedInterpreter implements Runnable {
   private CommunicationContainer interpret(CommunicationContainer comm) {
     try {
       switch (comm.getCmd()) {
-        case EVAL: comm.setObj(interpreter.eval(comm.getStatement()));
+        case EVAL: 
+          Util.log("ManagedInterpreter.interpret eval");
+          try {
+            comm.setObj(interpreter.eval(comm.getStatement()));
+          } catch (JepException e) {
+            comm.setException(e);
+          }
           break;
-        case EXEC: interpreter.eval(comm.getStatement());
+        case EXEC: 
+          Util.log("ManagedInterpreter.interpret exec");
+          interpreter.eval(comm.getStatement());
           break;
-        case GETVALUE: comm.setObj(interpreter.getValue(comm.getStatement()));
+        case GETVALUE: 
+          Util.log("ManagedInterpreter.interpret getValue");
+          comm.setObj(interpreter.getValue(comm.getStatement()));
           break;
-        case GETVALUEWITHTYPE: comm.setObj(interpreter.getValue(comm.getStatement(), comm.getType()));
+        case GETVALUEWITHTYPE:  
+          Util.log("ManagedInterpreter.interpret GETVALUEWITHTYPE");
+          comm.setObj(interpreter.getValue(comm.getStatement(), comm.getType()));
           break;
-        case INVOKEKWARGS: comm.setObj(interpreter.invoke(comm.getStatement(), comm.getKwargs()));
+        case INVOKEKWARGS:   
+          Util.log("ManagedInterpreter.interpret INVOKEKWARGS");
+          comm.setObj(interpreter.invoke(comm.getStatement(), comm.getKwargs()));
           break;
-        case INVOKEARGS: comm.setObj(interpreter.invoke(comm.getStatement(), comm.getArgs()));
+        case INVOKEARGS:   
+          Util.log("ManagedInterpreter.interpret INVOKEARGS");
+          comm.setObj(interpreter.invoke(comm.getStatement(), comm.getArgs()));
           break;
-        case INVOKEARGSKWARGS: comm.setObj(interpreter.invoke(comm.getStatement(), comm.getArgs(), comm.getKwargs()));
+        case INVOKEARGSKWARGS:    
+          Util.log("ManagedInterpreter.interpret INVOKEARGSKWARGS");
+          comm.setObj(interpreter.invoke(comm.getStatement(), comm.getArgs(), comm.getKwargs()));
           break;
-        case RUNSCRIPT: interpreter.runScript(comm.getStatement());
+        case RUNSCRIPT:     
+          Util.log("ManagedInterpreter.interpret RUNSCRIPT");
+          interpreter.runScript(comm.getStatement());
           break;
-        case SET: interpreter.set(comm.getStatement(), comm.getValue());
+        case SET:      
+          Util.log("ManagedInterpreter.interpret SET");
+          interpreter.set(comm.getStatement(), comm.getValue());
           break;
       }
     } catch (JepException e) {
       comm.setException(e);
     }
-    
+    Util.log("ManagedInterpreter.interpret returning comm");
     return comm;
   }
 
@@ -281,13 +310,14 @@ public class ManagedInterpreter implements Runnable {
       }
       c=communication;
     }
-    Util.log("send: leaving command " + c.getCmd() + " with return value: " + c.getValue() + " queuedToInterpret: " + queuedToInterpret);
+    Util.log("send: leaving command " + c.getCmd() + " with return value: " + c.getValue() + " and exception " + c.exception + " queuedToInterpret: " + queuedToInterpret);
     
     return c;
   }
   
   
-  public synchronized Boolean eval(String statement) throws JepException {
+  public synchronized Boolean eval(String statement) {
+    Util.log("eval(statements) with: " + statement);
     Boolean returnValue=null;
     
     CommunicationContainer<Boolean> comm = new CommunicationContainer<Boolean>(CMDS.EVAL);
@@ -429,7 +459,7 @@ public class ManagedInterpreter implements Runnable {
     private String statement=null;
     private Object value=null;
     private Class<T> type;
-    private JepException exception=null;
+    public JepException exception=null;
     private Object[] args;
     private Map<String, Object> kwargs;
     private final CMDS cmd;
@@ -506,11 +536,71 @@ public class ManagedInterpreter implements Runnable {
   }
 
   public void setPAppletMain(PAppletConnector pAppletConnector) {
+    Util.log("ManagedInterpreter.setPAppletMain");
+    if (mainset) {
+      Util.log("ManagedInterpreter.setPAppletMain has already been run. Leaving.");
+      return;
+    }
+    Util.log("ManagedInterpreter.setPAppletMain startInterpreter()");
+    startInterpreter();
     set("PAppletMain", pAppletConnector);
-    exec("for name in dir(PAppletMain):\n"
-        + "  if name.startswith('__') and name.endswith('__'):\n"
-        + "    continue\n"
-        + "  exec(name + ' = PAppletMain.' + name)\n\n\n");
+    Util.log("ManagedInterpreter.setPAppletMain get methods");
+    Method[] pAppletConnectorMethods = PApplet.class.getDeclaredMethods();
+    for (Method method : pAppletConnectorMethods) {
+      if (Modifier.isPublic(method.getModifiers())) {
+        String name = method.getName();
+        if ((name == "draw") || (name == "setup") ||(name == "settings")) {
+          continue;
+        }
+        String pythonEval = name + " = PAppletMain." + name;
+        Util.log("ManagedInterpreter.setPAppletMain pythonEval = '" + pythonEval + "'");
+        eval(pythonEval);
+      }
+    }
+    eval("frameCount = 0");
+    
+    Field[] pConstants = PConstants.class.getDeclaredFields();
+    for (Field field : pConstants) {
+      if (Modifier.isPublic(field.getModifiers())) {
+        String name = field.getName();
+        // There's got to be a better way to do this
+        String typeString = field.getAnnotatedType().getType().getTypeName();
+        String pythonEval = name + " = ";
+        try {
+          switch(typeString) {
+            case "int": pythonEval += field.getInt(field);
+              break;
+            case "char": pythonEval += field.getChar(field);
+              break;
+            case "float": pythonEval += field.getFloat(field);
+              break;
+            case "java.lang.String": pythonEval += (String) field.get(field);
+              break;
+            case "java.lang.String[]": set(field.getName(), (String[])field.get(field));
+              pythonEval = "";
+              break;
+          }
+        } catch (IllegalArgumentException e) {
+          // TODO Auto-generated catch block
+          e.printStackTrace();
+        } catch (IllegalAccessException e) {
+          // TODO Auto-generated catch block
+          e.printStackTrace();
+        }
+        Util.log("ManagedInterpreter.setPAppletMain pythonEval = '" + pythonEval + "'");
+        eval(pythonEval);
+      }
+    }
+    
+//    exec("for name in dir(PAppletMain):\n"
+//        + "  if name.startswith('__') and name.endswith('__'):\n"
+//        + "    continue\n"
+//        + "  if (name == 'setup') or (name == 'draw') or (name == 'settings'):\n"
+//        + "    continue\n"
+//        + "  exec('global ' + name + '\n' + name + ' = PAppletMain.' + name)\n\n\n");
+    //exec("ellipse = PAppletMain.ellipse");
+    mainset=true;
+    Util.log("ManagedInterpreter.setPAppletMain returning");
   }
 
 }

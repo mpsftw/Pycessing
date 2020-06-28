@@ -204,10 +204,7 @@ public class PAppletConnectorTest {
   @Test
   @Timeout(10)
   public void testRunSketch() {
-    //Pycessing.VERBOSE=true;
-    PyCallable drawFunc = Mockito.mock(PyCallable.class);
-    PyCallable setupFunc = Mockito.mock(PyCallable.class);
-    
+    Pycessing.VERBOSE=true;
 
     Util.log("testRunSketch: new PAppletConnector");
     testApplet=new PAppletConnector();
@@ -216,12 +213,16 @@ public class PAppletConnectorTest {
     Util.log("testRunSketch: Building interpreter");
     ManagedInterpreter spiedInterpreter = Mockito.spy(testApplet.getInterpreter());
     spiedInterpreter.startInterpreter();
+    Pycessing.VERBOSE=false;
+    spiedInterpreter.setPAppletMain(testApplet);
+    Pycessing.VERBOSE=true;
 
     Util.log("testRunSketch: exec function definitions");
     spiedInterpreter.exec("def setup():\n"
-        + "  PAppletMain.size(0)\n\n");
+        + "  background(0)\n\n");
     spiedInterpreter.exec("def draw():\n"
-        + "  PAppletMain.exit()\n\n");
+        + "  background(255)\n"
+        + "  exit()\n\n");
     
     Util.log("Set interpreter");
     testApplet.setInterpreter(spiedInterpreter);

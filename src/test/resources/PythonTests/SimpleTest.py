@@ -8,5 +8,6 @@ def setup():
     
 def draw():
     background(255)
+    elipse(20,20,20,20)
     if (frameCount > 100):
         exit()

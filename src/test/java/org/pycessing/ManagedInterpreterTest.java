@@ -594,11 +594,15 @@ class ManagedInterpreterTest {
   @Test
   @Timeout(5)
   public void testSetPAppletMain() throws JepException, InterruptedException {
+    //Pycessing.VERBOSE=true;
     PAppletConnector mockedConnector = Mockito.mock(PAppletConnector.class);
     spiedInterp.startInterpreter();
     spiedInterp.setPAppletMain(mockedConnector);
     
     spiedInterp.exec("background(0)");
+    spiedInterp.exec("print(PAppletMain)");
+    spiedInterp.exec("asldfkjw()");
+    Util.log(spiedInterp.getOutput());
     spiedInterp.exec("ellipse(20, 20, 20, 20)");
     
     spiedInterp.close();

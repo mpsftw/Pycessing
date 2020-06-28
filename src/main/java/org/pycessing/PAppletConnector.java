@@ -22,12 +22,13 @@ public class PAppletConnector extends PApplet implements Runnable{
   private String renderer=PConstants.JAVA2D;
   private Path sourceFile=null;
   private ArrayList<String> args;
-  private Boolean running=false;
   private ManagedInterpreter interp;
-  private boolean debug;
+  private boolean debug=false;
+  public Integer frameCount=new Integer(0);
   
   public PAppletConnector() {
     super();
+    args = new ArrayList<String>();
     interp = new ManagedInterpreter();
   }
   
@@ -62,9 +63,7 @@ public class PAppletConnector extends PApplet implements Runnable{
     // This should probably never run. This exists to match PApplet
     // It may be safe to remove this later.
     
-    System.err.println("PAppletConnector should not be run from main()");
-    return;
-    //PApplet.main("pycessing.PAppletConnector", args);
+    PApplet.main("pycessing.PAppletConnector", args);
 
   }
 
@@ -93,27 +92,55 @@ public class PAppletConnector extends PApplet implements Runnable{
   @Override 
   public void start() {
     Util.log("PAppletConnector start");
+    Util.log("PAppletConnector start: starting interpreter");
+    interp.startInterpreter();
+    interp.setPAppletMain(this);
     super.start();
+    Util.log("PAppletConnector exit start");
   }
   
   @Override 
   public void handleDraw() {
     Util.log("PAppletConnector handleDraw");
     super.handleDraw();
+    Util.log("PAppletConnector exit handleDraw");
   }
   
   @Override
-  public void draw() {
+  public synchronized void draw() {
+    Pycessing.VERBOSE=false;
     Util.log("PAppletConnector draw");
-    this.interp.exec("if 'draw' in dir():\n"
-        + "  draw()\n\n");
+    this.interp.exec("draw()");
+    Util.log("PAppletConnector draw finished. Incrementing frameCount.");
+    this.interp.eval("frameCount+=1");
+    String stdout = interp.getOutput();
+    String stderr = interp.getErr();
+    Util.log("Draw stdout/err: \n" + stdout + "\n" + stderr);
   }
   
   @Override
-  public void setup() {
+  public synchronized void setup() {
     Util.log("PAppletConnector setup");
-    this.interp.exec("if 'setup' in dir():\n"
-        + "  setup()\n\n");
+    //this.interp.exec("if 'setup' in dir():\n"
+    //    + "  setup()\n\n");
+    this.interp.exec("setup()");
+    String stdout = interp.getOutput();
+    String stderr = interp.getErr();
+    Util.log("Setup stdout/err: \n" + stdout + "\n" + stderr);
+  }
+  
+  @Override
+  public void exit() {
+    super.exit();
+    try {
+      interp.close();
+    } catch (JepException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    } catch (InterruptedException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    }
   }
   
   public void setSizeFromSetup(Path path) throws FileNotFoundException {
@@ -178,7 +205,7 @@ public class PAppletConnector extends PApplet implements Runnable{
     Util.log("PAppletConnector settings interp=" + interp + "and is running: " + interp.isRunning());
     Util.log("PAppletConnector settings running super.size(" + width + "," + height + "," + renderer);
     super.size(width,height,renderer);
-    this.interp.exec("if 'settings' in dir()\n"
+    this.interp.exec("if 'settings' in dir():\n"
         + "  settings()\n\n");
   }
 
@@ -189,18 +216,14 @@ public class PAppletConnector extends PApplet implements Runnable{
   
   @Override
   public void runSketch() {
-    Util.log("PAppletConnector runScript: starting interpreter");
-    interp.startInterpreter();
-    interp.setPAppletMain(this);
-    
     
     String[] argsArray = new String[args.size()+1];
     if (sourceFile != null) {
-      Util.log("PAppletConnector runScript: running interp.runScript");
+      Util.log("PAppletConnector runSketch: running interp.runScript");
       interp.runScript(sourceFile.toString());
     }
 
-    Util.log("PAppletConnector runScript: adding args");
+    Util.log("PAppletConnector runSketch: adding args");
     args.add(0, "org.pycessing.PAppletConnector");
     argsArray = args.toArray(argsArray);
     if (argsArray == null) {
@@ -208,14 +231,15 @@ public class PAppletConnector extends PApplet implements Runnable{
     }
 
     if (Pycessing.VERBOSE) {
-      System.out.print("PAppletConnector runScript: running super.runsketch(" + this.getClass().toString() + ", [");
+      System.out.print("PAppletConnector runSketch: running super.runsketch([");
       for (int i=0; i<argsArray.length; i++) {
         System.out.print(argsArray[i] + ", ");
       }
       System.out.print("]" + ", null)\n");
     }
     super.runSketch(argsArray);
-    Util.log("PAppletConnector runScript: complete. Exiting");
+    Util.log("PAppletConnector runSketch: complete. Exiting");
   }
+  
 
 }
