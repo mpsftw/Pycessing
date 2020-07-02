@@ -85,15 +85,6 @@ private ArrayList<String> newSpiedArgs(String file) {
   void setUp() throws Exception {
     testFilePath = Paths.get(testDir.getAbsolutePath()).resolve("testfile.txt");
     testFile = testFilePath.toFile();
-    spiedArgs = newSpiedArgs(testFile.getAbsolutePath());
-    
-    applet = new PAppletConnector();
-    spiedApplet = Mockito.spy(applet);
-    spiedApplet.setDebug(true);
-    spiedInterpreter = Mockito.spy(spiedApplet.getInterpreter());
-    spiedInterpreter.startInterpreter();
-    spiedApplet.setInterpreter(spiedInterpreter);
-    
     
     captureOutput();
   }
@@ -117,27 +108,55 @@ private ArrayList<String> newSpiedArgs(String file) {
     Pycessing.VERBOSE=false;
   }
   
+  public void setupEnvironment() {
+    spiedArgs = newSpiedArgs(testFile.getAbsolutePath());
+    
+    applet = new PAppletConnector();
+    spiedApplet = Mockito.spy(applet);
+    spiedApplet.setDebug(true);
+    spiedInterpreter = Mockito.spy(spiedApplet.getInterpreter());
+    spiedInterpreter.startInterpreter();
+    spiedApplet.setInterpreter(spiedInterpreter);
+
+    spiedInterpreter.setPAppletMain(spiedApplet);
+  }
+  
+  public void setupEnvironmentWithArgs(ArrayList<String> args) {
+    spiedArgs = Mockito.spy(args);
+
+    applet = new PAppletConnector(spiedArgs);
+    spiedApplet = Mockito.spy(applet);
+    spiedApplet.setDebug(true);
+    spiedInterpreter = Mockito.spy(spiedApplet.getInterpreter());
+    spiedInterpreter.startInterpreter();
+    spiedApplet.setInterpreter(spiedInterpreter);
+
+    spiedInterpreter.setPAppletMain(spiedApplet);
+  }
+  
   @Test
   @Timeout(10)
-  public void testDraw() {
+  public void testDraw() throws InterruptedException {
+    setupEnvironment();
     //Pycessing.VERBOSE=true;
     Util.log("spiedApplet: " + spiedApplet );
     //Pycessing.VERBOSE=false;
-    spiedInterpreter.setPAppletMain(spiedApplet);
+    //spiedInterpreter.setPAppletMain(spiedApplet);
     //Pycessing.VERBOSE=true;
     try {
       spiedInterpreter.exec("def setup():\n"
+          //+ "  print('In python setup\\n')\n"
           + "  background(255)\n"
           + "  ellipseMode(CENTER)\n"
           + "  smooth()\n"
           + "  stroke(255,30,30)\n"
-          + "  fill(16, 100, 200)\n"
-          + "  print('In python setup')\n\n");
+          + "  fill(16, 100, 200)\n\n");
       spiedInterpreter.exec("def draw():\n"
-          + "  print('In python draw')\n"
+          //+ "  print('In python draw\\n')\n"
           + "  background(255)\n"
           + "  ellipse(50, 50, frameCount, 60)\n"
           + "  if (frameCount > 60):\n"
+          //+ "    print('exiting\\n')\n"
           + "    exit()\n\n\n");
     } catch (NullPointerException e) {
       e.printStackTrace();
@@ -151,24 +170,39 @@ private ArrayList<String> newSpiedArgs(String file) {
     }
     
     //wait for it to finish
-    int i=0;
-    while (!spiedApplet.finished) {
-      try {
-        Thread.sleep(10);
-      } catch (InterruptedException e) {
-        // TODO Auto-generated catch block
-        e.printStackTrace();
-      }
-      i++;
-      if (i > 1000) {
-        break;
-      }
-    }
+    spiedApplet.waitForFinish();
   }
   
   @Test
-  public void testRunScript() {
-    fail("Not implemented");
+  @Timeout(10)
+  public void testRunScript() throws FileNotFoundException, InterruptedException {
+    Path BasicPythonScript = getPythonTestScript("BasicPythonScript.py");
+    ArrayList<String> args = new ArrayList<String>();
+    args.add(BasicPythonScript.toString());
+    setupEnvironmentWithArgs(args);
+    //Pycessing.VERBOSE=true;
+    
+    spiedApplet.loadFile(BasicPythonScript.toString());
+    spiedApplet.runSketch();
+    
+  //wait for it to finish
+    spiedApplet.waitForFinish();
+  }
+  
+  @Test
+  @Timeout(10)
+  public void testRunScriptP2D() throws FileNotFoundException, InterruptedException {
+    Path BasicPythonScript = getPythonTestScript("BasicPythonP2DScript.py");
+    ArrayList<String> args = new ArrayList<String>();
+    args.add(BasicPythonScript.toString());
+    setupEnvironmentWithArgs(args);
+    //Pycessing.VERBOSE=true;
+    
+    spiedApplet.loadFile(BasicPythonScript.toString());
+    spiedApplet.runSketch();
+    
+  //wait for it to finish
+    spiedApplet.waitForFinish();
   }
   
   @Test

@@ -162,6 +162,7 @@ public class PAppletConnectorTest {
   
   @Test
   public void testSetSizeFromSetup() throws FileNotFoundException {
+    //Pycessing.VERBOSE=true;
     Path script = getPythonTestScript("SimpleTest.py");
     testApplet.setSizeFromSetup(script);
     
@@ -204,7 +205,7 @@ public class PAppletConnectorTest {
   @Test
   @Timeout(10)
   public void testRunSketch() {
-    Pycessing.VERBOSE=true;
+    //Pycessing.VERBOSE=true;
 
     Util.log("testRunSketch: new PAppletConnector");
     testApplet=new PAppletConnector();
@@ -213,9 +214,9 @@ public class PAppletConnectorTest {
     Util.log("testRunSketch: Building interpreter");
     ManagedInterpreter spiedInterpreter = Mockito.spy(testApplet.getInterpreter());
     spiedInterpreter.startInterpreter();
-    Pycessing.VERBOSE=false;
+    //Pycessing.VERBOSE=false;
     spiedInterpreter.setPAppletMain(testApplet);
-    Pycessing.VERBOSE=true;
+    //Pycessing.VERBOSE=true;
 
     Util.log("testRunSketch: exec function definitions");
     spiedInterpreter.exec("def setup():\n"

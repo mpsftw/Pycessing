@@ -24,11 +24,18 @@ public class PAppletConnector extends PApplet implements Runnable{
   private ArrayList<String> args;
   private ManagedInterpreter interp;
   private boolean debug=false;
+  private final Object finishedLock = new Object();
   public Integer frameCount=new Integer(0);
   
   public PAppletConnector() {
     super();
     args = new ArrayList<String>();
+    interp = new ManagedInterpreter();
+  }
+  
+  public PAppletConnector(ArrayList<String> args) {
+    super();
+    this.args=args;
     interp = new ManagedInterpreter();
   }
   
@@ -68,10 +75,13 @@ public class PAppletConnector extends PApplet implements Runnable{
   }
 
   public synchronized void loadFile(String fileFromCLI) throws FileNotFoundException {
+    Util.log("PAppletConnector loadFile: " + fileFromCLI);
     sourceFile = Paths.get(fileFromCLI);
+    Util.log("PAppletConnector sourceFile set to: " + sourceFile.toString());
     if (!Files.exists(sourceFile)) {
       throw new FileNotFoundException(fileFromCLI + " not found");
     }
+    Util.log("PAppletConnector running setSizeFromSetup");
     setSizeFromSetup(sourceFile);
   }
 
@@ -85,8 +95,20 @@ public class PAppletConnector extends PApplet implements Runnable{
   
   @Override
   public void size(int width, int height) {
-    Util.log("PAppletConnector size(" + width + "," + height + ")");
-    super.size(width, height);
+    // For simplicity. size() can only be called from settings() which sends it to super
+    return;
+  }
+  
+  @Override
+  public void size(int width, int height, String renderer) {
+    // For simplicity. size() can only be called from settings() which sends it to super
+    return;
+  }
+  
+  @Override
+  public void size(int width, int height, String renderer, String path) {
+    // For simplicity. size() can only be called from settings() which sends it to super
+    return;
   }
   
   @Override 
@@ -108,7 +130,6 @@ public class PAppletConnector extends PApplet implements Runnable{
   
   @Override
   public synchronized void draw() {
-    Pycessing.VERBOSE=false;
     Util.log("PAppletConnector draw");
     this.interp.exec("draw()");
     Util.log("PAppletConnector draw finished. Incrementing frameCount.");
@@ -141,36 +162,53 @@ public class PAppletConnector extends PApplet implements Runnable{
       // TODO Auto-generated catch block
       e.printStackTrace();
     }
+    finishedLock.notifyAll();
   }
   
   public void setSizeFromSetup(Path path) throws FileNotFoundException {
-    // If size() is in setup(), it must be the first line
+    Util.log("PAppletConnector setSizeFromSetup with: " + path.toString());
     Scanner fileScanner = new Scanner(path.toFile());
-    Pattern setupPattern = Pattern.compile("def\\s*setup\\s*\\(\\s*\\)\\s*:.*");
-    Pattern sizePattern = Pattern.compile("\\s+size\\s*\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,?\\s*([A-Z,0-9]+)?\\s*\\).*");
+    Pattern setupPattern = Pattern.compile("^def\\s*setup\\s*\\(\\s*\\)\\s*:.*$");
     Matcher matcher = null;
     
     while (fileScanner.hasNextLine()) {
       String line = fileScanner.nextLine();
+      Util.log("PAppletConnector setSizeFromSetup line: " + line);
       matcher = setupPattern.matcher(line);
       if (matcher.find()) {
-        if (fileScanner.hasNextLine()) {
-          line = fileScanner.nextLine();
-          matcher = sizePattern.matcher(line);
-          if (matcher.find()) {
-            String w = matcher.group(1);
-            String h = matcher.group(2);
-            String r = matcher.group(3);
-            Util.log("Found usable size: " + line + " " + w + " " + h + " " + r);
-            width = Integer.parseInt(w);
-            height = Integer.parseInt(h);
-            setRenderer(r);
-          }
-        }
+        Util.log("PAppletConnector setSizeFromSetup found setup on line: " + line);
+        lookThroughSetupFromFile(fileScanner);
+      }
+    }
+  }
+
+  private void lookThroughSetupFromFile(Scanner fileScanner) {
+    Util.log("PAppletConnector lookThroughSetupFromFile");
+    Pattern sizePattern = Pattern.compile("^\\s+size\\s*\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,?\\s*([A-Z,0-9]+)?\\s*\\).*$");
+    Pattern outOfSetup = Pattern.compile("^\\S+.*$");
+    String line;
+    Matcher matcher;
+    
+    while (fileScanner.hasNextLine()) {
+      line = fileScanner.nextLine();
+      Util.log("PAppletConnector lookThroughSetupFromFile line: " + line);
+      matcher = outOfSetup.matcher(line);
+      if (matcher.find()) {
+        Util.log("PAppletConnector lookThroughSetupFromFile outOfSetup matched line: " + line + " \nReturning.");
+        return;
+      }
+      matcher = sizePattern.matcher(line);
+      if (matcher.find()) {
+        String w = matcher.group(1);
+        String h = matcher.group(2);
+        String r = matcher.group(3);
+        Util.log("Found usable size: " + line + " " + w + " " + h + " " + r);
+        width = Integer.parseInt(w);
+        height = Integer.parseInt(h);
+        setRenderer(r);
         return;
       }
     }
-    
   }
 
   void setRenderer(String r) {
@@ -205,6 +243,8 @@ public class PAppletConnector extends PApplet implements Runnable{
     Util.log("PAppletConnector settings interp=" + interp + "and is running: " + interp.isRunning());
     Util.log("PAppletConnector settings running super.size(" + width + "," + height + "," + renderer);
     super.size(width,height,renderer);
+    this.interp.set("width", width);
+    this.interp.set("height", height);
     this.interp.exec("if 'settings' in dir():\n"
         + "  settings()\n\n");
   }
@@ -239,6 +279,22 @@ public class PAppletConnector extends PApplet implements Runnable{
     }
     super.runSketch(argsArray);
     Util.log("PAppletConnector runSketch: complete. Exiting");
+  }
+  
+  @Override
+  public void dispose() {
+    super.dispose();
+    synchronized(finishedLock) {
+      finishedLock.notifyAll();
+    }
+  }
+  
+  public void waitForFinish() throws InterruptedException {
+    synchronized(finishedLock) {
+      while (!finished) {
+        finishedLock.wait(100);
+      }
+    }
   }
   
 

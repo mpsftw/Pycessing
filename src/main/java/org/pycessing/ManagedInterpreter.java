@@ -367,6 +367,7 @@ public class ManagedInterpreter implements Runnable {
     // Really, I do. I tried that too.
     // Jep automatically casts some things, so if you don't do this the right way
     // you won't be able to get Integers (because they'll be cast to Long)
+    Util.log("ManagedInterpreter.getValue(" + symbol + ", " + clazz.toString() + ")");
     CommunicationContainer<T> comm = new CommunicationContainer<T>(CMDS.GETVALUEWITHTYPE);
     comm.setStatement(symbol);
     comm.setType(clazz);
@@ -552,6 +553,15 @@ public class ManagedInterpreter implements Runnable {
         if ((name == "draw") || (name == "setup") ||(name == "settings")) {
           continue;
         }
+        
+        // exit() has meaning in both PApplet and python
+        if (name == "exit") {
+          exec("def exit():\n" + 
+              "  PAppletMain.exit()\n" +
+              "  exit()\n\n"
+              );
+        }
+        
         String pythonEval = name + " = PAppletMain." + name;
         Util.log("ManagedInterpreter.setPAppletMain pythonEval = '" + pythonEval + "'");
         eval(pythonEval);
