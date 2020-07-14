@@ -15,6 +15,7 @@ import jep.JepException;
 import jep.python.PyCallable;
 import processing.core.PApplet;
 import processing.core.PConstants;
+import processing.core.PImage;
 import processing.core.PSurface;
 
 public class PAppletConnector extends PApplet implements Runnable{
@@ -152,17 +153,60 @@ public class PAppletConnector extends PApplet implements Runnable{
   
   @Override
   public void exit() {
-    super.exit();
+    dispose();
+  }
+  
+  @Override
+  public void background(float b) {
+    Util.log("PAppletConnector.background(float: " + b + ")");
+    super.background(3.0f);
+    Util.log("PAppletConnector.background(float: " + b + ") returning");
+  }
+  
+  @Override
+  public void background(float a, float b) {
+    Util.log("PAppletConnector.background(float: " + a + ", float: " + b + ")");
+    super.background(a,b);
+    Util.log("PAppletConnector.background(float: " + a + ", float: " + b + ") returning");
+  }
+  
+  @Override
+  public void background(float a, float b, float c) {
+    Util.log("PAppletConnector.background(float: " + a + ", float: " + b + ", float: " + c + ")");
+    super.background(a,b,c);
+    Util.log("PAppletConnector.background(float: " + a + ", float: " + b + ", float: " + c + ") returning");
+  }
+  
+  @Override
+  public void background(float a, float b, float c, float d) {
+    Util.log("PAppletConnector.background(float: " + a + ", float: " + b + ", float: " + c + ", float: " + d + ")");
     try {
-      interp.close();
-    } catch (JepException e) {
-      // TODO Auto-generated catch block
-      e.printStackTrace();
-    } catch (InterruptedException e) {
-      // TODO Auto-generated catch block
+      super.background(250.0f,250.0f,250.0f,250.0f);
+    } catch (NullPointerException e) {
       e.printStackTrace();
     }
-    finishedLock.notifyAll();
+    Util.log("PAppletConnector.background(float: " + a + ", float: " + b + ", float: " + c + ", float: " + d + ") returning");
+  }
+  
+  @Override
+  public void background(int b) {
+    Util.log("PAppletConnector.background(int: " + b + ")");
+    super.background(b);
+    Util.log("PAppletConnector.background(int: " + b + ") returning");
+  }
+  
+  @Override
+  public void background(int a, float b) {
+    Util.log("PAppletConnector.background(int: " + a + ", float: " + b + ")");
+    super.background(a, b);
+    Util.log("PAppletConnector.background(int: " + a + ", float: " + b + ") returning");
+  }
+  
+  @Override
+  public void background(PImage p) {
+    Util.log("PAppletConnector.background(PImage: " + p + ")");
+    super.background(p);
+    Util.log("PAppletConnector.background(PImage: " + p + ") returning");
   }
   
   public void setSizeFromSetup(Path path) throws FileNotFoundException {
@@ -178,6 +222,7 @@ public class PAppletConnector extends PApplet implements Runnable{
       if (matcher.find()) {
         Util.log("PAppletConnector setSizeFromSetup found setup on line: " + line);
         lookThroughSetupFromFile(fileScanner);
+        return;
       }
     }
   }
@@ -284,6 +329,12 @@ public class PAppletConnector extends PApplet implements Runnable{
   @Override
   public void dispose() {
     super.dispose();
+    try {
+      interp.close();
+    } catch (JepException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    }
     synchronized(finishedLock) {
       finishedLock.notifyAll();
     }

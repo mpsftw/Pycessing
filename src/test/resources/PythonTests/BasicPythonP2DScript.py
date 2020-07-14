@@ -9,8 +9,10 @@ def setup():
 
 def draw():
     global k
-    background(0)
-    k += .06
-    arc(width/2, height/2, 200, 200, HALF_PI, k+HALF_PI)
-    if k > TWO_PI:
+    background(250.0, 250.0, 225.0, 255.0)
+    if (frameCount > 2):
         exit()
+    #k += .06
+    #arc(width/2, height/2, 200, 200, HALF_PI, k+HALF_PI)
+    #if k > TWO_PI:
+    #    exit()

@@ -129,7 +129,7 @@ class ManagedInterpreterTest {
     Util.log("tearDown: validateMockitoUsage");
     Mockito.validateMockitoUsage();
     Util.log("tearDown: spiedInterp.close");
-    assertTimeout(ofSeconds(2), () -> {spiedInterp.close();});
+    spiedInterp.close();
     spiedInterp = null;
     Util.log("tearDown: capture content");
     Pycessing.VERBOSE=false;
@@ -149,11 +149,8 @@ class ManagedInterpreterTest {
   @Test 
   @Timeout(5)
   public void testOutputCapture() throws JepException {
-
+    //Pycessing.VERBOSE=true;
     spiedInterp.startInterpreter();
-    SharedInterpreter originalInterpreter = spiedInterp.getInterpreter();
-    SharedInterpreter spiedInterpreter = Mockito.spy(originalInterpreter);
-    spiedInterp.setInterpreter(spiedInterpreter);
     
     spiedInterp.eval("print('hello world')");
 
@@ -186,12 +183,18 @@ class ManagedInterpreterTest {
 
     //Pycessing.VERBOSE=true;
     // Make sure running is set to false
+    spiedInterp.setThread(new Thread());
     assertFalse(spiedInterp.isRunning(), "Can't test run while spiedInterp.isRunning is true");
     
     // Everything is self contained. There's not really anything to test other than making sure it doesn't 
     // throw an exception or kill the VM (which happens when the exit() is run in the interpreter)
     // If it does kill the VM, maven will crash
-    assertDoesNotThrow(() -> {spiedInterp.run();});
+    try {
+      assertDoesNotThrow(() -> {spiedInterp.run();});
+    } catch (NullPointerException e) {
+      e.printStackTrace();
+      failWithMessage("testRun caught a null pointer");
+    }
     
   }
   
@@ -216,7 +219,7 @@ class ManagedInterpreterTest {
     spiedInterp.close();
     assertFalse(spiedInterp.isRunning(), "testStartStop: isRunning returned true after close");
     Mockito.verify(spiedThread).interrupt();
-    Mockito.verify(spiedThread).join(5000L);
+    Mockito.verify(spiedThread).join();
     
     // Make sure it's gone
     spiedThread.interrupt();

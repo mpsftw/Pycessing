@@ -144,15 +144,27 @@ public class ManagedInterpreter implements Runnable {
     Util.log("startInterpreter: Finished. Thread is alive: " + thread.isAlive());
   }
   
-  public synchronized void close() throws JepException, InterruptedException {
+  public void close() throws JepException {
+    if (!running) {
+      return;
+    }
     running = false;
     if (thread == null) {
       return;
     }
-    if (thread.isAlive()) {
-      thread.interrupt();
+    if (Thread.currentThread() == thread) {
+      return;
     }
-    thread.join(5000L);
+    synchronized (interpretLock) {
+      interpretLock.notifyAll();
+    }
+    thread.interrupt();
+    try {
+      thread.join();
+    } catch (InterruptedException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    }
   }
   
   @Override
@@ -160,13 +172,7 @@ public class ManagedInterpreter implements Runnable {
     
     //Setup - this takes some time, but it MUST happen in the interpreter thread
     try {
-      interpreter = new SharedInterpreter();
-    } catch (JepException e3) {
-      // TODO Auto-generated catch block
-      e3.printStackTrace();
-    }
-    try {
-      initializeInterpreter(interpreter);
+      initializeInterpreter();
     } catch (JepException e2) {
       //PythonException.raiseJepException(e2);
       e2.printStackTrace();
@@ -176,7 +182,9 @@ public class ManagedInterpreter implements Runnable {
 
     Util.log("run: counting down latch inRunLoop");
     startLatch.countDown();
-    
+
+    Util.log("ManagedInterpreter.run: setting thread name");
+    thread.setName("ManagedInterpreter runloop thread");
     try {
       runLoop();
     } catch (InterruptedException e1) {
@@ -210,6 +218,11 @@ public class ManagedInterpreter implements Runnable {
         while (!queuedToInterpret) {
           Util.log("runLoop: waiting queuedToInterpret: " + queuedToInterpret);
           interpretLock.wait();
+          /*if (Thread.interrupted()) {
+            Util.log("ManagedInterpreter.runLoop: Interrupted. Returning.");
+            interpretLock.notifyAll();
+            return;
+          }*/
         }
         Util.log("runLoop: interpreting queuedToInterpret: " + queuedToInterpret);
         interpret(communication);
@@ -273,9 +286,14 @@ public class ManagedInterpreter implements Runnable {
     return comm;
   }
 
-  public void initializeInterpreter(SharedInterpreter interp) throws JepException {
-    interp.set("interpreter", interp);
-    interp.set("managedinterpreter", this);
+  public void initializeInterpreter() throws JepException {
+    try {
+      interpreter = new SharedInterpreter();
+    } catch (NullPointerException e) {
+      e.printStackTrace();
+    }
+    interpreter.set("interpreter", interpreter);
+    interpreter.set("managedinterpreter", this);
     if (!Pycessing.INTERACTIVE) {
       captureOutout();
     }
@@ -291,7 +309,7 @@ public class ManagedInterpreter implements Runnable {
   }
   
   @SuppressWarnings("unchecked")
-  protected synchronized <T> CommunicationContainer<T> send(CommunicationContainer<T> c) throws InterruptedException {
+  protected synchronized <T> CommunicationContainer<T> send(CommunicationContainer<T> c) {
     Util.log("In send with command: " + c.getCmd());
     Util.log("send: locking interpretLock queuedToInterpret: " + queuedToInterpret);
     synchronized(interpretLock) {
@@ -304,9 +322,15 @@ public class ManagedInterpreter implements Runnable {
 
     Util.log("send: locking interpretLock queuedToInterpret: " + queuedToInterpret);
     synchronized(interpretLock) {
-      while (queuedToInterpret) {
+      while (queuedToInterpret && running) {
         Util.log("send: waiting interpretLock queuedToInterpret: " + queuedToInterpret);
-        interpretLock.wait();
+        try {
+          interpretLock.wait();
+        } catch (InterruptedException e) {
+          Util.log("ManagedInterpreter.send: Interrupted and returning.");
+          running=false;
+          return c;
+        }
       }
       c=communication;
     }
@@ -323,12 +347,7 @@ public class ManagedInterpreter implements Runnable {
     CommunicationContainer<Boolean> comm = new CommunicationContainer<Boolean>(CMDS.EVAL);
     comm.setStatement(statement);
     
-    try {
-      comm=send(comm);
-    } catch (InterruptedException e) {
-      running=false;
-      return returnValue;
-    }
+    comm=send(comm);
     
     returnValue=(Boolean) comm.getValue();
     
@@ -341,24 +360,14 @@ public class ManagedInterpreter implements Runnable {
     CommunicationContainer<Boolean> comm = new CommunicationContainer<Boolean>(CMDS.EXEC);
     comm.setStatement(statements);
     
-    try {
-      comm=send(comm);
-    } catch (InterruptedException e) {
-      running=false;
-      return;
-    }
+    comm=send(comm);
   }
   
   public synchronized Object getValue(String symbol) {
     CommunicationContainer<Object> comm = new CommunicationContainer<Object>(CMDS.GETVALUE);
     comm.setStatement(symbol);
     
-    try {
-      comm=send(comm);
-    } catch (InterruptedException e) {
-      running=false;
-      return comm.getValue();
-    }
+    comm=send(comm);
     return comm.getValue();
   }
   
@@ -372,12 +381,7 @@ public class ManagedInterpreter implements Runnable {
     comm.setStatement(symbol);
     comm.setType(clazz);
     
-    try {
-      comm=send(comm);
-    } catch (InterruptedException e) {
-      running=false;
-      return clazz.cast(comm.getValue());
-    }
+    comm=send(comm);
     return clazz.cast(comm.getValue());
   }
   
@@ -387,12 +391,7 @@ public class ManagedInterpreter implements Runnable {
     comm.setStatement(symbol);
     comm.setKwargs(kwargs);
     
-    try {
-      comm=send(comm);
-    } catch (InterruptedException e) {
-      running=false;
-      return comm.getValue();
-    }
+    comm=send(comm);
     return comm.getValue();
   }
   
@@ -402,12 +401,7 @@ public class ManagedInterpreter implements Runnable {
     comm.setStatement(symbol);
     comm.setArgs(args);
     
-    try {
-      comm=send(comm);
-    } catch (InterruptedException e) {
-      running=false;
-      return comm.getValue();
-    }
+    comm=send(comm);
     return comm.getValue();
   }
   
@@ -419,13 +413,7 @@ public class ManagedInterpreter implements Runnable {
     comm.setKwargs(kwargs);
 
     Util.log("invoke sending");
-    try {
-      comm=send(comm);
-    } catch (InterruptedException e) {
-      Util.log("invoke interrupted! returning.");
-      running=false;
-      return comm.getValue();
-    }
+    comm=send(comm);
     Util.log("invoke returning");
     return comm.getValue();
   }
@@ -434,12 +422,7 @@ public class ManagedInterpreter implements Runnable {
     CommunicationContainer<Object> comm = new CommunicationContainer<Object>(CMDS.RUNSCRIPT);
     comm.setStatement(script);
     
-    try {
-      comm=send(comm);
-    } catch (InterruptedException e) {
-      running=false;
-      return; //(String) comm.getValue();
-    }
+    comm=send(comm);
     return; //(String) comm.getValue();
   }
   
@@ -447,12 +430,7 @@ public class ManagedInterpreter implements Runnable {
     CommunicationContainer<Object> comm = new CommunicationContainer<Object>(CMDS.SET);
     comm.setStatement(symbol);
     comm.setObj(obj);
-    try {
-      comm=send(comm);
-    } catch (InterruptedException e) {
-      running=false;
-      return;
-    }
+    comm=send(comm);
     return;
   }
   
@@ -557,8 +535,7 @@ public class ManagedInterpreter implements Runnable {
         // exit() has meaning in both PApplet and python
         if (name == "exit") {
           exec("def exit():\n" + 
-              "  PAppletMain.exit()\n" +
-              "  exit()\n\n"
+              "  PAppletMain.dispose()\n\n"
               );
         }
         

@@ -1,6 +1,5 @@
 # This is a plain, simple file that, when loaded into the interpreter, should define a function that is runnable
 # then run that function and print the return value
-from ctypes.test import __main__
 
 
 def simpleTestFunc(n):

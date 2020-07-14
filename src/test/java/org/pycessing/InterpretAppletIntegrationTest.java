@@ -9,6 +9,7 @@ import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.ArrayList;
 
 import org.junit.jupiter.api.AfterAll;
@@ -19,6 +20,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mockito;
+
+import processing.core.PApplet;
 
 class InterpretAppletIntegrationTest {private static ByteArrayOutputStream outContent;
 private static ByteArrayOutputStream errContent;
@@ -76,7 +79,9 @@ private ArrayList<String> newSpiedArgs(String file) {
 }
 
   @BeforeAll
-  static void setUpBeforeClass() throws Exception {}
+  static void setUpBeforeClass() throws Exception {
+    PApplet.useNativeSelect = true;
+  }
 
   @AfterAll
   static void tearDownAfterClass() throws Exception {}
@@ -91,10 +96,12 @@ private ArrayList<String> newSpiedArgs(String file) {
 
   @AfterEach
   void tearDown() throws Exception {
+    Util.log("Releasing output");
     String output = outContent.toString();
     String error = errContent.toString();
     releaseOutput();
-    
+
+    Util.log("Print stdout/stderr");
     if (!output.isEmpty()) {
       System.out.print("\nout:\n'" + output + "'\n");
     }
@@ -102,9 +109,12 @@ private ArrayList<String> newSpiedArgs(String file) {
     if (!error.isEmpty()) {
       System.err.print("\nerr:\n'" + error + "'\n");
     }
-    
+
+    Util.log("Deleting temp files");
     Files.deleteIfExists(testFilePath);
+    Util.log("validateMockitoUsage");
     Mockito.validateMockitoUsage();
+    Util.log("Done");
     Pycessing.VERBOSE=false;
   }
   
@@ -187,25 +197,38 @@ private ArrayList<String> newSpiedArgs(String file) {
     
   //wait for it to finish
     spiedApplet.waitForFinish();
+    System.out.println("testRunScript finished");
   }
   
   @Test
-  @Timeout(10)
+  //@Timeout(10)
   public void testRunScriptP2D() throws FileNotFoundException, InterruptedException {
     Path BasicPythonScript = getPythonTestScript("BasicPythonP2DScript.py");
     ArrayList<String> args = new ArrayList<String>();
     args.add(BasicPythonScript.toString());
-    setupEnvironmentWithArgs(args);
+    //setupEnvironmentWithArgs(args);
+    PAppletConnector myApplet = new PAppletConnector(args);
+    myApplet.getInterpreter().startInterpreter();
+    
     //Pycessing.VERBOSE=true;
     
-    spiedApplet.loadFile(BasicPythonScript.toString());
-    spiedApplet.runSketch();
+    myApplet.loadFile(BasicPythonScript.toString());
+    //assertTimeout(Duration.ofSeconds(5), () -> {
+    try {
+      myApplet.runSketch();
+    } catch (NullPointerException e) {
+      e.printStackTrace();
+      failWithMessage("testRunScriptP2D caught null pointer");
+    }
+    //});
     
   //wait for it to finish
-    spiedApplet.waitForFinish();
+    assertTimeout(Duration.ofSeconds(5), () -> {
+      myApplet.waitForFinish();
+    });
   }
   
-  @Test
+  //@Test
   public void testREPL() {
     fail("Not implemented");
   }
