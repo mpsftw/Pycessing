@@ -31,13 +31,11 @@ public class PAppletConnector extends PApplet implements Runnable{
   public PAppletConnector() {
     super();
     args = new ArrayList<String>();
-    interp = new ManagedInterpreter();
   }
   
   public PAppletConnector(ArrayList<String> args) {
     super();
     this.args=args;
-    interp = new ManagedInterpreter();
   }
   
   protected void setDebug(boolean b) {
@@ -115,16 +113,33 @@ public class PAppletConnector extends PApplet implements Runnable{
   @Override 
   public void start() {
     Util.log("PAppletConnector start");
-    Util.log("PAppletConnector start: starting interpreter");
-    interp.startInterpreter();
-    interp.setPAppletMain(this);
+    
     super.start();
+
+    
     Util.log("PAppletConnector exit start");
   }
   
   @Override 
   public void handleDraw() {
     Util.log("PAppletConnector handleDraw");
+    if (interp == null) {
+      // First run through the animation loop
+      try {
+        interp = new ManagedInterpreter(this);
+        interp.set("width", (Integer) width);
+        interp.set("height", (Integer) height);
+        interp.exec("if 'settings' in dir():\n"
+            + "  settings()\n\n");
+        if (sourceFile != null) {
+          Util.log("PAppletConnector runSketch: running interp.runScript");
+          interp.runScript(sourceFile.toString());
+        }
+      } catch (JepException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      }
+    }
     super.handleDraw();
     Util.log("PAppletConnector exit handleDraw");
   }
@@ -132,28 +147,37 @@ public class PAppletConnector extends PApplet implements Runnable{
   @Override
   public synchronized void draw() {
     Util.log("PAppletConnector draw");
-    this.interp.exec("draw()");
-    Util.log("PAppletConnector draw finished. Incrementing frameCount.");
-    this.interp.eval("frameCount+=1");
-    String stdout = interp.getOutput();
-    String stderr = interp.getErr();
-    Util.log("Draw stdout/err: \n" + stdout + "\n" + stderr);
+    String stdout;
+    String stderr;
+    try {
+      interp.exec("draw()");
+      Util.log("PAppletConnector draw finished. Incrementing frameCount.");
+      interp.eval("frameCount+=1");
+      stdout = interp.getCapturedOutput();
+      stderr = interp.getCapturedError();
+      Util.log("Draw stdout/err: \n" + stdout + "\n" + stderr);
+    } catch (JepException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    }
   }
   
   @Override
   public synchronized void setup() {
     Util.log("PAppletConnector setup");
-    //this.interp.exec("if 'setup' in dir():\n"
-    //    + "  setup()\n\n");
-    this.interp.exec("setup()");
-    String stdout = interp.getOutput();
-    String stderr = interp.getErr();
-    Util.log("Setup stdout/err: \n" + stdout + "\n" + stderr);
+    try {
+      this.interp.exec("if 'setup' in dir():\n"
+          + "  setup()\n\n");
+    } catch (JepException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    }
   }
   
   @Override
   public void exit() {
-    dispose();
+    Util.log("PAppletConnector: Exit called.");
+    super.exit();
   }
   
   @Override
@@ -285,13 +309,9 @@ public class PAppletConnector extends PApplet implements Runnable{
 
   @Override 
   public synchronized void settings() {
-    Util.log("PAppletConnector settings interp=" + interp + "and is running: " + interp.isRunning());
+    Util.log("PAppletConnector settings interp=" + interp);
     Util.log("PAppletConnector settings running super.size(" + width + "," + height + "," + renderer);
     super.size(width,height,renderer);
-    this.interp.set("width", width);
-    this.interp.set("height", height);
-    this.interp.exec("if 'settings' in dir():\n"
-        + "  settings()\n\n");
   }
 
   @Override
@@ -301,12 +321,8 @@ public class PAppletConnector extends PApplet implements Runnable{
   
   @Override
   public void runSketch() {
-    
+
     String[] argsArray = new String[args.size()+1];
-    if (sourceFile != null) {
-      Util.log("PAppletConnector runSketch: running interp.runScript");
-      interp.runScript(sourceFile.toString());
-    }
 
     Util.log("PAppletConnector runSketch: adding args");
     args.add(0, "org.pycessing.PAppletConnector");
@@ -324,20 +340,6 @@ public class PAppletConnector extends PApplet implements Runnable{
     }
     super.runSketch(argsArray);
     Util.log("PAppletConnector runSketch: complete. Exiting");
-  }
-  
-  @Override
-  public void dispose() {
-    super.dispose();
-    try {
-      interp.close();
-    } catch (JepException e) {
-      // TODO Auto-generated catch block
-      e.printStackTrace();
-    }
-    synchronized(finishedLock) {
-      finishedLock.notifyAll();
-    }
   }
   
   public void waitForFinish() throws InterruptedException {

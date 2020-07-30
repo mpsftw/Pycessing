@@ -125,7 +125,6 @@ public class PAppletConnectorTest {
     if (!error.isEmpty()) {
       System.err.print("\nerr:\n'" + error + "'\n");
     }
-    
     Files.deleteIfExists(testFilePath);
     Mockito.validateMockitoUsage();
     Pycessing.VERBOSE=false;
@@ -195,68 +194,11 @@ public class PAppletConnectorTest {
     testApplet.loadFile(getPythonTestScript("SimpleTest.py").toString());
     
     try {
-      //testApplet.run();
+      testApplet.run();
     } catch (Exception e) {
       e.printStackTrace();
       failWithMessage("Caught an unexpected error");
     }
-  }
-  
-  @Test
-  @Timeout(10)
-  public void testRunSketch() {
-    //Pycessing.VERBOSE=true;
-
-    Util.log("testRunSketch: new PAppletConnector");
-    testApplet=new PAppletConnector();
-    testApplet.setDebug(true);
-    
-    Util.log("testRunSketch: Building interpreter");
-    ManagedInterpreter spiedInterpreter = Mockito.spy(testApplet.getInterpreter());
-    spiedInterpreter.startInterpreter();
-    //Pycessing.VERBOSE=false;
-    spiedInterpreter.setPAppletMain(testApplet);
-    //Pycessing.VERBOSE=true;
-
-    Util.log("testRunSketch: exec function definitions");
-    spiedInterpreter.exec("def setup():\n"
-        + "  background(0)\n\n");
-    spiedInterpreter.exec("def draw():\n"
-        + "  background(255)\n"
-        + "  exit()\n\n");
-    
-    Util.log("Set interpreter");
-    testApplet.setInterpreter(spiedInterpreter);
-        
-
-    Util.log("testRunSketch: get test file");
-    String testScript = null;
-    try {
-      testScript = getPythonTestScript("SimplePlainPythonNoMain.py").toString();
-    } catch (FileNotFoundException e) {
-      e.printStackTrace();
-      failWithMessage("testRunSketch failed to open test script");
-    }
-
-    Util.log("testRunSketch: get args");
-    ArrayList<String> args = new ArrayList<String>();
-
-    testApplet.setInterpreter(spiedInterpreter);
-    testApplet.setArgs(args);
-
-    Util.log("testRunSketch: spy");
-    PAppletConnector spiedApplet = Mockito.spy(testApplet);
-
-    Util.log("testRunSketch: runSketch");
-    // Getting a null pointer
-    try {
-      spiedApplet.runSketch();
-    } catch (NullPointerException e) {
-      e.printStackTrace();
-      failWithMessage("runSketch threw a null pointer");
-    }
-    
-    
   }
 
 }

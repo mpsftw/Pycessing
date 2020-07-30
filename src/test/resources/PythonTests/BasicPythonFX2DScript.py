@@ -1,7 +1,7 @@
 def setup():
     global k
     #fullScreen(P2D)
-    size(300,300,P2D)
+    size(300,300,FX2D)
     fill(0,200,0,80)
     stroke(0,255,0,127)
     strokeWeight(4)

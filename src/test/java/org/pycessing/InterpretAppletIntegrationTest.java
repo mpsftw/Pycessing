@@ -9,9 +9,11 @@ import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.Permission;
 import java.time.Duration;
 import java.util.ArrayList;
 
+import org.junit.Rule;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -19,8 +21,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
+
 import org.mockito.Mockito;
 
+import jep.JepException;
 import processing.core.PApplet;
 
 class InterpretAppletIntegrationTest {private static ByteArrayOutputStream outContent;
@@ -30,10 +34,29 @@ private final static PrintStream originalErr = System.err;
 private static PrintStream capturedOut;
 private static PrintStream capturedErr;
 
-private ArrayList<String> spiedArgs;
-private PAppletConnector applet;
-private PAppletConnector spiedApplet;
-private ManagedInterpreter spiedInterpreter;
+public ArrayList<String> spiedArgs;
+public PAppletConnector applet;
+public PAppletConnector spiedApplet;
+public ManagedInterpreter spiedInterpreter;
+
+private final static SecurityManager originalSecurityManager = System.getSecurityManager();
+private final static SecurityManager disallowExitManager = new DisallowExitSecurityManager(originalSecurityManager);
+/*private final static SecurityManager disallowExitManager = new SecurityManager() {
+  @Override
+  public void checkPermission(Permission perm) 
+  {
+    //super.checkPermission(perm);
+  }
+  @Override
+  public void checkPermission(Permission perm, Object context) {
+    
+  }
+  @Override
+  public void checkExit(int status) {
+    //super.checkExit(status);
+    throw new SecurityException("System.exit called with status: " + status);
+  }
+};*/
 
 @TempDir
 public File testDir;
@@ -92,10 +115,13 @@ private ArrayList<String> newSpiedArgs(String file) {
     testFile = testFilePath.toFile();
     
     captureOutput();
+    System.setSecurityManager(disallowExitManager);
   }
 
   @AfterEach
   void tearDown() throws Exception {
+    Util.log("Enabling System.exit");
+    System.setSecurityManager(originalSecurityManager);
     Util.log("Releasing output");
     String output = outContent.toString();
     String error = errContent.toString();
@@ -115,120 +141,74 @@ private ArrayList<String> newSpiedArgs(String file) {
     Util.log("validateMockitoUsage");
     Mockito.validateMockitoUsage();
     Util.log("Done");
-    Pycessing.VERBOSE=false;
   }
   
-  public void setupEnvironment() {
+  public void setupEnvironment() throws JepException {
     spiedArgs = newSpiedArgs(testFile.getAbsolutePath());
     
     applet = new PAppletConnector();
     spiedApplet = Mockito.spy(applet);
     spiedApplet.setDebug(true);
-    spiedInterpreter = Mockito.spy(spiedApplet.getInterpreter());
-    spiedInterpreter.startInterpreter();
-    spiedApplet.setInterpreter(spiedInterpreter);
 
-    spiedInterpreter.setPAppletMain(spiedApplet);
   }
   
-  public void setupEnvironmentWithArgs(ArrayList<String> args) {
+  public void setupEnvironmentWithArgs(ArrayList<String> args) throws JepException {
     spiedArgs = Mockito.spy(args);
 
     applet = new PAppletConnector(spiedArgs);
     spiedApplet = Mockito.spy(applet);
     spiedApplet.setDebug(true);
-    spiedInterpreter = Mockito.spy(spiedApplet.getInterpreter());
-    spiedInterpreter.startInterpreter();
-    spiedApplet.setInterpreter(spiedInterpreter);
 
-    spiedInterpreter.setPAppletMain(spiedApplet);
   }
   
-  @Test
-  @Timeout(10)
-  public void testDraw() throws InterruptedException {
-    setupEnvironment();
-    //Pycessing.VERBOSE=true;
-    Util.log("spiedApplet: " + spiedApplet );
-    //Pycessing.VERBOSE=false;
-    //spiedInterpreter.setPAppletMain(spiedApplet);
-    //Pycessing.VERBOSE=true;
-    try {
-      spiedInterpreter.exec("def setup():\n"
-          //+ "  print('In python setup\\n')\n"
-          + "  background(255)\n"
-          + "  ellipseMode(CENTER)\n"
-          + "  smooth()\n"
-          + "  stroke(255,30,30)\n"
-          + "  fill(16, 100, 200)\n\n");
-      spiedInterpreter.exec("def draw():\n"
-          //+ "  print('In python draw\\n')\n"
-          + "  background(255)\n"
-          + "  ellipse(50, 50, frameCount, 60)\n"
-          + "  if (frameCount > 60):\n"
-          //+ "    print('exiting\\n')\n"
-          + "    exit()\n\n\n");
-    } catch (NullPointerException e) {
-      e.printStackTrace();
-      failWithMessage("testDraw caught a null pointer trying to define draw()");
-    }
-    try {
-      spiedApplet.runSketch();
-    } catch (NullPointerException e) {
-      e.printStackTrace();
-      failWithMessage("testDraw caught a null pointer trying runSketch()");
-    }
-    
-    //wait for it to finish
-    spiedApplet.waitForFinish();
-  }
-  
-  @Test
-  @Timeout(10)
-  public void testRunScript() throws FileNotFoundException, InterruptedException {
-    Path BasicPythonScript = getPythonTestScript("BasicPythonScript.py");
+  private void testScript(String script, String test) throws FileNotFoundException, JepException, InterruptedException {
+    Path BasicPythonScript = getPythonTestScript(script);
     ArrayList<String> args = new ArrayList<String>();
     args.add(BasicPythonScript.toString());
     setupEnvironmentWithArgs(args);
     //Pycessing.VERBOSE=true;
     
-    spiedApplet.loadFile(BasicPythonScript.toString());
-    spiedApplet.runSketch();
-    
+    applet.loadFile(BasicPythonScript.toString());
+    try {
+      applet.runSketch();
+    } catch (NullPointerException e) { 
+      e.printStackTrace();
+      failWithMessage(test + " caught a NullPointerException when trying to runSkecth()");
+    }
   //wait for it to finish
-    spiedApplet.waitForFinish();
-    System.out.println("testRunScript finished");
+    applet.waitForFinish();
+    System.out.println(test + " finished");
   }
   
   @Test
-  //@Timeout(10)
-  public void testRunScriptP2D() throws FileNotFoundException, InterruptedException {
-    Path BasicPythonScript = getPythonTestScript("BasicPythonP2DScript.py");
-    ArrayList<String> args = new ArrayList<String>();
-    args.add(BasicPythonScript.toString());
-    //setupEnvironmentWithArgs(args);
-    PAppletConnector myApplet = new PAppletConnector(args);
-    myApplet.getInterpreter().startInterpreter();
-    
+  @Timeout(10)
+  public void testRunScript() throws FileNotFoundException, InterruptedException, JepException, SecurityException {
     //Pycessing.VERBOSE=true;
-    
-    myApplet.loadFile(BasicPythonScript.toString());
-    //assertTimeout(Duration.ofSeconds(5), () -> {
-    try {
-      myApplet.runSketch();
-    } catch (NullPointerException e) {
-      e.printStackTrace();
-      failWithMessage("testRunScriptP2D caught null pointer");
-    }
-    //});
-    
-  //wait for it to finish
-    assertTimeout(Duration.ofSeconds(5), () -> {
-      myApplet.waitForFinish();
-    });
+    testScript("BasicPythonScript.py", "testRunScript");
   }
   
-  //@Test
+  @Test
+  @Timeout(10)
+  public void testRunScriptP2D() throws FileNotFoundException, InterruptedException, JepException {
+  //Pycessing.VERBOSE=true;
+    testScript("BasicPythonP2DScript.py", "testRunScript");
+  }
+  
+  @Test
+  @Timeout(10)
+  public void testRunScriptP3D() throws FileNotFoundException, InterruptedException, JepException {
+  //Pycessing.VERBOSE=true;
+    testScript("BasicPythonP3DScript.py", "testRunScript");
+  }
+  
+  @Test
+  @Timeout(10)
+  public void testRunScriptFX2D() throws FileNotFoundException, InterruptedException, JepException {
+  //Pycessing.VERBOSE=true;
+    testScript("BasicPythonFX2DScript.py", "testRunScript");
+  }
+  
+  @Test
   public void testREPL() {
     fail("Not implemented");
   }

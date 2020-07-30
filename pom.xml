@@ -76,7 +76,7 @@
  	 	<artifactId>jep</artifactId>
  	 	<version>3.9.0</version>
 	</dependency>
-	<dependency>
+<!--	<dependency>
          <groupId>org.jogl</groupId>
          <artifactId>jogl</artifactId>
          <scope>system</scope>
@@ -89,8 +89,8 @@
          <scope>system</scope>
          <version>2.3.2</version>
          <systemPath>${basedir}/src/lib/gluegen-rt.jar</systemPath>
-    </dependency>
-<!--     <dependency>
+    </dependency> -->
+     <dependency>
       <groupId>org.jogamp.gluegen</groupId>
       <artifactId>gluegen-rt-main</artifactId>
       <version>2.3.2</version>
@@ -109,7 +109,7 @@
       <groupId>org.jogamp.joal</groupId>
       <artifactId>joal-main</artifactId>
       <version>2.3.2</version>
-    </dependency> -->
+    </dependency>
   </dependencies>
 
   <build>

@@ -13,7 +13,7 @@ import processing.core.PApplet;
 
 public class Pycessing {
   
-  public static final PAppletConnector PyApplet = new PAppletConnector();
+  public static final PAppletConnector PyApplet = new PAppletConnector(); 
   public static final ArrayList<String> PAppletArgs = new ArrayList<String>();
   public static boolean INTERACTIVE=false;
   public static boolean VERBOSE=false;

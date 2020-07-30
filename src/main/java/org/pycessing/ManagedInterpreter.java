@@ -5,77 +5,35 @@ import java.io.PrintStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
-import jep.Jep;
 import jep.JepException;
 import jep.SharedInterpreter;
+import jep.SubInterpreter;
 import processing.core.PApplet;
 import processing.core.PConstants;
 
-public class ManagedInterpreter implements Runnable {
+public class ManagedInterpreter extends SubInterpreter {
   
   // There can be only one!
-  private SharedInterpreter interpreter;
-  private Boolean debug=false;
-
-  private Thread thread = null;
-  private boolean running=false;
-  private boolean interactive=false;
-  private boolean mainset=false;
-  private CommunicationContainer communication = null;
-  private boolean queuedToInterpret=false;
-  private final Object interpretLock = new Object();
-  private final CountDownLatch startLatch = new CountDownLatch(1);
-  private ByteArrayOutputStream outContent = new ByteArrayOutputStream();
-  private ByteArrayOutputStream errContent = new ByteArrayOutputStream();
-  private PrintStream capturedOut =  new PrintStream(outContent);
-  private PrintStream capturedErr = new PrintStream(errContent);
+  private String capturedOutput = "";
+  private String capturedError = "";
+  private final Object waitLock = new Object();
   
-  public ManagedInterpreter() {
-    interpreter=null;
+  private final ConcurrentLinkedQueue<String> queue = new ConcurrentLinkedQueue<String>();
+  
+  public ManagedInterpreter(PAppletConnector p) throws JepException {
+    super();
+    captureOutput();
+    initializeInterpreter();
+    setPAppletMain(p);
   }
   
-  public void setDebug(Boolean d) {
-    debug=d;
-  }
-  
-  public PrintStream getCapturedOut() {
-    return capturedOut;
-  }
-  
-  public PrintStream getCapturedErr() {
-    return capturedErr;
-  }
-  
-  public SharedInterpreter getInterpreter() {
-    return interpreter;
-  }
-  
-  public void setInterpreter(SharedInterpreter i) {
-    if (!debug) {
-      throw new RuntimeException("Setting the interpreter will break things. Only use this to debug the pycessing interpreter.");
-    }
-    interpreter=i;
-  }
-  
-  public Thread getThread() {
-    return thread;
-  }
-  
-  public void setThread(Thread t) {
-    thread = t;
-  }
-  
-  public void captureOutout() throws JepException {
-    interpreter.exec("import sys\nfrom io import StringIO\n");
+  private void captureOutput() throws JepException {
+    super.exec("import sys\n");
+    super.exec("from io import StringIO\n");
+    super.set("__captured_output__", (Object) capturedOutput);
+    super.set("__captured_error__", (Object) capturedError);
     String outputCapture = 
         "class SplitIO(StringIO):\n" + 
         "   def __init__(self, otherOut):\n" + 
@@ -97,459 +55,139 @@ public class ManagedInterpreter implements Runnable {
         "sys.stdout = __jepout__\n" +
         "sys.stderr = __jeperr__\n";
     
-    interpreter.exec(outputCapture);
+    super.exec(outputCapture);
   }
   
-  public String getOutput() {
-    return getValue("__jepout__.getvalue()", String.class);
+  public String getCapturedOutput() {
+    String rv = capturedOutput;
+    capturedOutput = "";
+    return rv;
   }
   
-  public String getErr() {
-    return getValue("__jeperr__.getvalue()", String.class);
+  public String getCapturedError() {
+    String rv = capturedError;
+    capturedError = "";
+    return rv;
   }
   
-  public void startInterpreter() {
-    Util.log("startInterpreter: starting with running=" + running);
-    if (running) {
-      Util.log("startInterpreter: looks like we're already running. Returning without doing anything.");
-      return;
-    }
+  private void moveOutputToString() throws JepException {
     try {
-      startInterpreter(new Thread(this));
-    } catch (NullPointerException e) {
-      e.printStackTrace();
-      return;
+      capturedOutput += getValue("__jepout__.getvalue()", String.class);
+    } catch (JepException e) {
+      if (! e.getLocalizedMessage().contains("'__jepout__' is not defined")) {
+        throw e;
+      }
     }
-  }
-
-  public void startInterpreter(Thread t) {
-    if (running) {
-      return;
-    }
-    running=true;
-    thread = t;
-    
-    // Wait until everything is set up.
-    Util.log("startInterpreter: locking runningLock");
-    thread.start();
-    Util.log("startInterpreter: starting while loop");
-    Util.log("startInterpreter: waiting startLatch");
-    try {
-      startLatch.await();
-    } catch (InterruptedException e) {
-      running=false;
-      return;
-    }
-    Util.log("startInterpreter: out of wait");
-    Util.log("startInterpreter: Finished. Thread is alive: " + thread.isAlive());
   }
   
-  public void close() throws JepException {
-    if (!running) {
-      return;
-    }
-    running = false;
-    if (thread == null) {
-      return;
-    }
-    if (Thread.currentThread() == thread) {
-      return;
-    }
-    synchronized (interpretLock) {
-      interpretLock.notifyAll();
-    }
-    thread.interrupt();
+  public void moveErrorToString() throws JepException {
     try {
-      thread.join();
-    } catch (InterruptedException e) {
-      // TODO Auto-generated catch block
-      e.printStackTrace();
+      capturedError += getValue("__jeperr__.getvalue()", String.class);
+    } catch (JepException e) {
+      if (! e.getLocalizedMessage().contains("'__jeperr__' is not defined")) {
+        throw e;
+      }
     }
   }
   
   @Override
-  public void run() {
-    
-    //Setup - this takes some time, but it MUST happen in the interpreter thread
-    try {
-      initializeInterpreter();
-    } catch (JepException e2) {
-      //PythonException.raiseJepException(e2);
-      e2.printStackTrace();
-      return;
+  public boolean eval(String e) throws JepException {
+    boolean rv = super.eval(e);
+    moveOutputToString();
+    moveErrorToString();
+    return rv;
+  }
+  
+  @Override
+  public void exec(String e) throws JepException {
+    super.exec(e);
+    moveOutputToString();
+    moveErrorToString();
+  }
+  
+  public void runScript(String path) throws JepException {
+    super.runScript(path);
+    moveOutputToString();
+    moveErrorToString();
+  }
+  
+  public void close() throws JepException {
+    synchronized (waitLock) {
+      waitLock.notifyAll();
     }
-    Util.log("Interpreter initialized");
-
-    Util.log("run: counting down latch inRunLoop");
-    startLatch.countDown();
-
-    Util.log("ManagedInterpreter.run: setting thread name");
-    thread.setName("ManagedInterpreter runloop thread");
-    try {
-      runLoop();
-    } catch (InterruptedException e1) {
-      Util.log("run: Caught interruption! Returning.");
-      running=false;
-    }
-
-    // Try to be nice
-    try {
-      // sending exit() crashes the interpreter. That could be a problem.
-      // interpreter.eval("exit()");
-      Util.log("run: closing interpreter");
-      interpreter.close();
-      interpreter = null;
-    } catch (JepException e) {
-      // TODO Auto-generated catch block
-      e.printStackTrace();
-    }
-    Util.log("run: Returning.");
+    super.close();
   }
 
-  private void runLoop() throws InterruptedException {
-    // Let everyone know we're here and looping
-    Util.log("runLoop: entering while loop queuedToInterpret: " + queuedToInterpret);
-    while (running) {
-      Util.log("runLoop:Top of loop quedToInterpret: " + queuedToInterpret);
-      CommunicationContainer c = null;
-
-      Util.log("runLoop: locking interpretLock queuedToInterpret: " + queuedToInterpret);
-      synchronized (interpretLock) {
-        while (!queuedToInterpret) {
-          Util.log("runLoop: waiting queuedToInterpret: " + queuedToInterpret);
-          interpretLock.wait();
-          /*if (Thread.interrupted()) {
-            Util.log("ManagedInterpreter.runLoop: Interrupted. Returning.");
-            interpretLock.notifyAll();
-            return;
-          }*/
-        }
-        Util.log("runLoop: interpreting queuedToInterpret: " + queuedToInterpret);
-        interpret(communication);
-        queuedToInterpret=false;
-        Util.log("runLoop: End of loop queuedToInterpret: " + queuedToInterpret);
-        interpretLock.notifyAll();
+  private void initializeInterpreter() throws JepException {
+    super.set("interpreter", this);
+    super.set("managedinterpreter", this);
+  }
+  
+  public void queueToInterpretAndWait(String s) {
+    synchronized (waitLock) {
+      queue.add(s);
+      try {
+          waitLock.wait();
+      } catch (InterruptedException e) {
+        return;
       }
-      Util.log("runLoop:Bottom of loop quedToInterpret: " + queuedToInterpret);
-    }
-  }
-
-  @SuppressWarnings("unchecked")
-  private CommunicationContainer interpret(CommunicationContainer comm) {
-    try {
-      switch (comm.getCmd()) {
-        case EVAL: 
-          Util.log("ManagedInterpreter.interpret eval");
-          try {
-            comm.setObj(interpreter.eval(comm.getStatement()));
-          } catch (JepException e) {
-            comm.setException(e);
-          }
-          break;
-        case EXEC: 
-          Util.log("ManagedInterpreter.interpret exec");
-          interpreter.eval(comm.getStatement());
-          break;
-        case GETVALUE: 
-          Util.log("ManagedInterpreter.interpret getValue");
-          comm.setObj(interpreter.getValue(comm.getStatement()));
-          break;
-        case GETVALUEWITHTYPE:  
-          Util.log("ManagedInterpreter.interpret GETVALUEWITHTYPE");
-          comm.setObj(interpreter.getValue(comm.getStatement(), comm.getType()));
-          break;
-        case INVOKEKWARGS:   
-          Util.log("ManagedInterpreter.interpret INVOKEKWARGS");
-          comm.setObj(interpreter.invoke(comm.getStatement(), comm.getKwargs()));
-          break;
-        case INVOKEARGS:   
-          Util.log("ManagedInterpreter.interpret INVOKEARGS");
-          comm.setObj(interpreter.invoke(comm.getStatement(), comm.getArgs()));
-          break;
-        case INVOKEARGSKWARGS:    
-          Util.log("ManagedInterpreter.interpret INVOKEARGSKWARGS");
-          comm.setObj(interpreter.invoke(comm.getStatement(), comm.getArgs(), comm.getKwargs()));
-          break;
-        case RUNSCRIPT:     
-          Util.log("ManagedInterpreter.interpret RUNSCRIPT");
-          interpreter.runScript(comm.getStatement());
-          break;
-        case SET:      
-          Util.log("ManagedInterpreter.interpret SET");
-          interpreter.set(comm.getStatement(), comm.getValue());
-          break;
-      }
-    } catch (JepException e) {
-      comm.setException(e);
-    }
-    Util.log("ManagedInterpreter.interpret returning comm");
-    return comm;
-  }
-
-  public void initializeInterpreter() throws JepException {
-    try {
-      interpreter = new SharedInterpreter();
-    } catch (NullPointerException e) {
-      e.printStackTrace();
-    }
-    interpreter.set("interpreter", interpreter);
-    interpreter.set("managedinterpreter", this);
-    if (!Pycessing.INTERACTIVE) {
-      captureOutout();
     }
   }
   
-  public synchronized Boolean isRunning() {
-    return running;
+  public void processQueue() throws JepException {
+    synchronized(waitLock) {
+      while (!queue.isEmpty()) {
+        String toEval = queue.poll();
+        exec(toEval);
+      }
+      waitLock.notifyAll();
+    }
   }
 
   public synchronized void startREPL() {
     // TODO Auto-generated method stub
     
   }
-  
-  @SuppressWarnings("unchecked")
-  protected synchronized <T> CommunicationContainer<T> send(CommunicationContainer<T> c) {
-    Util.log("In send with command: " + c.getCmd());
-    Util.log("send: locking interpretLock queuedToInterpret: " + queuedToInterpret);
-    synchronized(interpretLock) {
-      Util.log("send: setting communication queuedToInterpret: " + queuedToInterpret);
-      communication=c;
-      queuedToInterpret=true;
-      Util.log("send: notifying interpretLock queuedToInterpret: " + queuedToInterpret);
-      interpretLock.notifyAll();
-    }
 
-    Util.log("send: locking interpretLock queuedToInterpret: " + queuedToInterpret);
-    synchronized(interpretLock) {
-      while (queuedToInterpret && running) {
-        Util.log("send: waiting interpretLock queuedToInterpret: " + queuedToInterpret);
-        try {
-          interpretLock.wait();
-        } catch (InterruptedException e) {
-          Util.log("ManagedInterpreter.send: Interrupted and returning.");
-          running=false;
-          return c;
-        }
-      }
-      c=communication;
-    }
-    Util.log("send: leaving command " + c.getCmd() + " with return value: " + c.getValue() + " and exception " + c.exception + " queuedToInterpret: " + queuedToInterpret);
-    
-    return c;
-  }
-  
-  
-  public synchronized Boolean eval(String statement) {
-    Util.log("eval(statements) with: " + statement);
-    Boolean returnValue=null;
-    
-    CommunicationContainer<Boolean> comm = new CommunicationContainer<Boolean>(CMDS.EVAL);
-    comm.setStatement(statement);
-    
-    comm=send(comm);
-    
-    returnValue=(Boolean) comm.getValue();
-    
-    return returnValue;
-  }
-  
-  public synchronized void exec(String statements) {
-    Util.log("exec(statements) with: " + statements);
-    Util.log("Running: " + thread.isAlive());
-    CommunicationContainer<Boolean> comm = new CommunicationContainer<Boolean>(CMDS.EXEC);
-    comm.setStatement(statements);
-    
-    comm=send(comm);
-  }
-  
-  public synchronized Object getValue(String symbol) {
-    CommunicationContainer<Object> comm = new CommunicationContainer<Object>(CMDS.GETVALUE);
-    comm.setStatement(symbol);
-    
-    comm=send(comm);
-    return comm.getValue();
-  }
-  
-  public synchronized <T> T getValue(String symbol, Class<T> clazz) {
-    // I know the temptation is to be lazy and cast the result from getValue
-    // Really, I do. I tried that too.
-    // Jep automatically casts some things, so if you don't do this the right way
-    // you won't be able to get Integers (because they'll be cast to Long)
-    Util.log("ManagedInterpreter.getValue(" + symbol + ", " + clazz.toString() + ")");
-    CommunicationContainer<T> comm = new CommunicationContainer<T>(CMDS.GETVALUEWITHTYPE);
-    comm.setStatement(symbol);
-    comm.setType(clazz);
-    
-    comm=send(comm);
-    return clazz.cast(comm.getValue());
-  }
-  
-  public synchronized Object invoke(String symbol, Map<String, Object> kwargs) {
-    Util.log("invoke(symbol, kwargs) with: " + symbol + " " + kwargs);
-    CommunicationContainer<Object> comm = new CommunicationContainer<Object>(CMDS.INVOKEKWARGS);
-    comm.setStatement(symbol);
-    comm.setKwargs(kwargs);
-    
-    comm=send(comm);
-    return comm.getValue();
-  }
-  
-  public synchronized Object invoke(String symbol, Object... args) {
-    Util.log("invoke(symbol, args) with: " + symbol + " " + args);
-    CommunicationContainer<Object> comm = new CommunicationContainer<Object>(CMDS.INVOKEARGS);
-    comm.setStatement(symbol);
-    comm.setArgs(args);
-    
-    comm=send(comm);
-    return comm.getValue();
-  }
-  
-  public synchronized Object invoke(String symbol, Object[] args, Map<String, Object> kwargs) {
-    Util.log("invoke(symbol, args, kwargs) with: " + symbol + " " + args + " " + kwargs);
-    CommunicationContainer<Object> comm = new CommunicationContainer<Object>(CMDS.INVOKEARGSKWARGS);
-    comm.setStatement(symbol);
-    comm.setArgs(args);
-    comm.setKwargs(kwargs);
-
-    Util.log("invoke sending");
-    comm=send(comm);
-    Util.log("invoke returning");
-    return comm.getValue();
-  }
-  
-  public synchronized void runScript(String script) {
-    CommunicationContainer<Object> comm = new CommunicationContainer<Object>(CMDS.RUNSCRIPT);
-    comm.setStatement(script);
-    
-    comm=send(comm);
-    return; //(String) comm.getValue();
-  }
-  
-  public synchronized void set(String symbol, Object obj) {
-    CommunicationContainer<Object> comm = new CommunicationContainer<Object>(CMDS.SET);
-    comm.setStatement(symbol);
-    comm.setObj(obj);
-    comm=send(comm);
-    return;
-  }
-  
-  protected class CommunicationContainer<T> {
-    private String statement=null;
-    private Object value=null;
-    private Class<T> type;
-    public JepException exception=null;
-    private Object[] args;
-    private Map<String, Object> kwargs;
-    private final CMDS cmd;
-    
-    public CommunicationContainer(CMDS c) {
-      cmd=c;
-    }
-    
-    public void setType(Class<T> c) {
-      type=c;
-    }
-    
-    public Class<T> getType() {
-      return type;
-    }
-    
-    public final CMDS getCmd() {
-      return cmd;
-    }
-    
-    void setStatement(String s) {
-      statement = s;
-    }
-    
-    String getStatement() {
-      return statement;
-    }
-    
-    void setObj(Object o) {
-      value=o;
-    }
-    
-    Object getValue() {
-      return value;
-    }
-    
-    void setArgs(Object[] a) {
-      args=a;
-    }
-    
-    Object[] getArgs() {
-      return args;
-    }
-    
-    void setKwargs(Map<String, Object> m) {
-      kwargs=m;
-    }
-    
-    Map<String, Object> getKwargs() {
-      return kwargs;
-    }
-    
-    void setException(JepException e) {
-      exception=e;
-    }
-    
-    synchronized void throwException() throws JepException {
-      if (exception != null) {
-        throw exception;
-      }
-    }
-  }
-  
-  protected enum CMDS {
-    EVAL,
-    EXEC,
-    GETVALUE,
-    GETVALUEWITHTYPE,
-    INVOKEKWARGS,
-    INVOKEARGS,
-    INVOKEARGSKWARGS,
-    RUNSCRIPT,
-    SET
-  }
-
-  public void setPAppletMain(PAppletConnector pAppletConnector) {
+  private void setPAppletMain(PAppletConnector pAppletConnector) throws JepException {
     Util.log("ManagedInterpreter.setPAppletMain");
-    if (mainset) {
-      Util.log("ManagedInterpreter.setPAppletMain has already been run. Leaving.");
-      return;
-    }
     Util.log("ManagedInterpreter.setPAppletMain startInterpreter()");
-    startInterpreter();
-    set("PAppletMain", pAppletConnector);
+    super.set("PAppletMain", pAppletConnector);
     Util.log("ManagedInterpreter.setPAppletMain get methods");
     Method[] pAppletConnectorMethods = PApplet.class.getDeclaredMethods();
     for (Method method : pAppletConnectorMethods) {
       if (Modifier.isPublic(method.getModifiers())) {
         String name = method.getName();
-        if ((name == "draw") || (name == "setup") ||(name == "settings")) {
+        if ((name == "draw") || (name == "setup") ||(name == "settings") || (name == "print")) {
           continue;
         }
         
         // exit() has meaning in both PApplet and python
-        if (name == "exit") {
-          exec("def exit():\n" + 
-              "  PAppletMain.dispose()\n\n"
-              );
-        }
+        //if (name == "exit") {
+        //  super.exec("def exit():\n" + 
+        //      "  PAppletMain.dispose()\n\n"
+        //      );
+        //}
         
         String pythonEval = name + " = PAppletMain." + name;
         Util.log("ManagedInterpreter.setPAppletMain pythonEval = '" + pythonEval + "'");
-        eval(pythonEval);
+        super.eval(pythonEval);
       }
     }
-    eval("frameCount = 0");
+    super.eval("frameCount = 0");
     
     Field[] pConstants = PConstants.class.getDeclaredFields();
     for (Field field : pConstants) {
       if (Modifier.isPublic(field.getModifiers())) {
         String name = field.getName();
+        switch (name) {
+          case "BACKSPACE": continue;
+          case "TAB": continue;
+          case "ENTER": continue;
+          case "RETURN": continue;
+          case "ESC": continue;
+          case "DELETE": continue;
+        }
         // There's got to be a better way to do this
         String typeString = field.getAnnotatedType().getType().getTypeName();
         String pythonEval = name + " = ";
@@ -561,9 +199,9 @@ public class ManagedInterpreter implements Runnable {
               break;
             case "float": pythonEval += field.getFloat(field);
               break;
-            case "java.lang.String": pythonEval += (String) field.get(field);
+            case "java.lang.String": pythonEval += "\"\"\"" + (String) field.get(field) + "\"\"\"";
               break;
-            case "java.lang.String[]": set(field.getName(), (String[])field.get(field));
+            case "java.lang.String[]": super.set(field.getName(), (String[])field.get(field));
               pythonEval = "";
               break;
           }
@@ -575,7 +213,7 @@ public class ManagedInterpreter implements Runnable {
           e.printStackTrace();
         }
         Util.log("ManagedInterpreter.setPAppletMain pythonEval = '" + pythonEval + "'");
-        eval(pythonEval);
+        super.eval(pythonEval);
       }
     }
     
@@ -586,7 +224,6 @@ public class ManagedInterpreter implements Runnable {
 //        + "    continue\n"
 //        + "  exec('global ' + name + '\n' + name + ' = PAppletMain.' + name)\n\n\n");
     //exec("ellipse = PAppletMain.ellipse");
-    mainset=true;
     Util.log("ManagedInterpreter.setPAppletMain returning");
   }
 
